@@ -202,6 +202,17 @@ tr:hover td{background:rgba(0,0,0,.025)}
 .transferir-btn{font-size:11px;color:var(--blue-tx);border:1px solid rgba(29,78,216,.2);background:rgba(29,78,216,.05);border-radius:6px;padding:4px 10px;cursor:pointer;margin-left:auto;}
 .transferir-btn:hover{background:rgba(29,78,216,.1);}
 .badge-recebida{font-size:10px;font-weight:700;color:var(--blue-tx);background:rgba(29,78,216,.08);border:1px solid rgba(29,78,216,.18);border-radius:10px;padding:2px 7px;vertical-align:middle;margin-left:6px;}
+/* ── Ordem de Serviço ── */
+.os-status-ok{color:var(--green-tx);background:rgba(5,150,105,.08);border:1px solid rgba(5,150,105,.18);}
+.os-status-div{color:var(--orange-tx);background:rgba(217,119,6,.08);border:1px solid rgba(217,119,6,.18);}
+.os-status-sem{color:var(--red-tx);background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.18);}
+.os-status-nf{color:var(--blue-tx);background:rgba(29,78,216,.08);border:1px solid rgba(29,78,216,.18);}
+.os-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap;}
+.os-tab{padding:7px 16px;border-radius:8px 8px 0 0;border:1px solid transparent;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);background:transparent;transition:all .15s;}
+.os-tab.active{background:var(--surface);border-color:var(--border);border-bottom-color:transparent;color:var(--text);}
+.os-tab-bar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+.os-diff-pos{color:var(--red-tx);font-weight:700;}
+.os-diff-ok{color:var(--green-tx);font-weight:700;}
 @keyframes pulse-yellow { 0%,100%{opacity:1} 50%{opacity:.3} }
 .sync-saving { animation: pulse-yellow 1s infinite; }
 /* ── AUTH ── */
@@ -981,6 +992,131 @@ tr:hover td{background:rgba(0,0,0,.025)}
 </div>
 
 <!-- ===== USUÁRIOS (admin only) ===== -->
+<!-- ===== ORDEM DE SERVIÇO ===== -->
+<div id="page-ordemservico" class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Ordens de Serviço</h2>
+      <p>Cadastro de OS e cruzamento automático com as Notas Fiscais</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-secondary btn-sm" onclick="importarOSExcel()">📥 Importar Excel</button>
+      <button class="btn btn-secondary btn-sm" onclick="exportarOSExcel()">⬇ Exportar</button>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalOS()">+ Nova OS</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+    <div class="kpi-card" style="--kpi-color:var(--accent);">
+      <div class="kpi-label">Total OS</div>
+      <div class="kpi-value" id="os-k-total">0</div>
+      <div class="kpi-sub">ordens cadastradas</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--green);">
+      <div class="kpi-label">OK — Com NF</div>
+      <div class="kpi-value" id="os-k-ok">0</div>
+      <div class="kpi-sub">NF encontrada e batida</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow);">
+      <div class="kpi-label">Divergências</div>
+      <div class="kpi-value" id="os-k-div">0</div>
+      <div class="kpi-sub">valor ou fornecedor diferente</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--red);">
+      <div class="kpi-label">Sem NF</div>
+      <div class="kpi-value" id="os-k-sem">0</div>
+      <div class="kpi-sub">OS sem nota fiscal</div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="os-tab-bar">
+    <button class="os-tab active" id="ostab-cruz" onclick="osShowTab('cruz')">🔍 Cruzamento OS × NF</button>
+    <button class="os-tab" id="ostab-lista" onclick="osShowTab('lista')">📋 Ordens de Serviço</button>
+    <button class="os-tab" id="ostab-semos" onclick="osShowTab('semos')">🔵 NFs sem OS cadastrada</button>
+  </div>
+
+  <!-- Tab: Cruzamento -->
+  <div id="ostab-cruz-content">
+    <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+      <input type="text" id="os-busca" placeholder="Buscar por OS, fornecedor, valor..." style="flex:1;max-width:320px;" oninput="filtrarCruzamento()">
+      <select id="os-filtro-status" onchange="filtrarCruzamento()" style="min-width:160px;">
+        <option value="">Todos os status</option>
+        <option value="OK">✅ OK</option>
+        <option value="Divergência">⚠️ Divergências</option>
+        <option value="Sem NF">🔴 Sem NF</option>
+        <option value="Sem OS">🔵 Sem OS</option>
+      </select>
+    </div>
+    <div id="os-cruzamento-table"></div>
+  </div>
+
+  <!-- Tab: Lista OS -->
+  <div id="ostab-lista-content" style="display:none;">
+    <div id="os-lista-table"></div>
+  </div>
+
+  <!-- Tab: NFs sem OS -->
+  <div id="ostab-semos-content" style="display:none;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">NFs com campo OS preenchido mas sem OS correspondente cadastrada neste portal.</div>
+    <div id="os-semos-table"></div>
+  </div>
+</div>
+
+<!-- MODAL OS -->
+<div id="modal-os" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalOS()">
+  <div class="modal" style="max-width:520px;width:96%;">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-os-titulo">Nova Ordem de Serviço</div>
+      <button class="modal-close" onclick="fecharModalOS()">✕</button>
+    </div>
+    <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="auth-field" style="grid-column:span 2;">
+        <label>Número da OS *</label>
+        <input type="text" id="os-f-numero" placeholder="Ex: OS-2025-001">
+      </div>
+      <div class="auth-field" style="grid-column:span 2;">
+        <label>Fornecedor / Empresa</label>
+        <input type="text" id="os-f-fornecedor" placeholder="Nome do fornecedor">
+      </div>
+      <div class="auth-field">
+        <label>Valor (R$)</label>
+        <input type="number" id="os-f-valor" placeholder="0,00" step="0.01" min="0">
+      </div>
+      <div class="auth-field">
+        <label>Data de Abertura</label>
+        <input type="date" id="os-f-data">
+      </div>
+      <div class="auth-field">
+        <label>Status</label>
+        <select id="os-f-status">
+          <option value="Aberta">Aberta</option>
+          <option value="Em andamento">Em andamento</option>
+          <option value="Concluída">Concluída</option>
+          <option value="Cancelada">Cancelada</option>
+        </select>
+      </div>
+      <div class="auth-field">
+        <label>Tolerância de Valor (%)</label>
+        <input type="number" id="os-f-tolerancia" value="5" min="0" max="30">
+      </div>
+      <div class="auth-field" style="grid-column:span 2;">
+        <label>Descrição do Serviço</label>
+        <input type="text" id="os-f-descricao" placeholder="Descrição resumida">
+      </div>
+      <div class="auth-field" style="grid-column:span 2;">
+        <label>Observações</label>
+        <input type="text" id="os-f-obs" placeholder="Observações adicionais">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="fecharModalOS()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="salvarModalOS()">Salvar OS</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== AGENTES IA ===== -->
 <div id="page-agentes" class="page">
   <div class="page-header">
@@ -1780,6 +1916,7 @@ function buildNav() {
       section('Controle'),
       item('vencimentos',  '⏰', 'Vencimentos'),
       item('operadores',   '👷', 'Operadores'),
+      item('ordemservico', '🔧', 'Ordens de Serviço'),
       item('agentes',      '🤖', 'Agentes IA'),
       section('Operação'),
       item('importar',     '📥', 'Importar & Processar'),
@@ -1800,6 +1937,7 @@ function buildNav() {
       item('verificar',   '🔍', 'Verificar NFs'),
       section('Controle'),
       item('vencimentos', '⏰', 'Vencimentos'),
+      item('ordemservico','🔧', 'Ordens de Serviço'),
       item('agentes',     '🤖', 'Agentes IA'),
       section('Operação'),
       item('importar',    '📥', 'Importar & Processar'),
@@ -1902,6 +2040,319 @@ function classificarVerificar(chave) {
 // ============================================================
 // INIT — verifica auth antes de montar o portal
 // ============================================================
+// ── ORDEM DE SERVIÇO ────────────────────────────────────────
+const SK_OS = 'portal_os_manutencao';
+let osDB = [];
+let _osCruzamento = [];
+let _osTabAtiva = 'cruz';
+let _osEditIdx = -1;
+
+function carregarOS() {
+  try { osDB = JSON.parse(localStorage.getItem(SK_OS) || '[]'); } catch(e) { osDB = []; }
+}
+
+function salvarOSLocal() {
+  localStorage.setItem(SK_OS, JSON.stringify(osDB));
+}
+
+function buildPageOS() {
+  carregarOS();
+  cruzarOS();
+  renderOSKPIs();
+  osShowTab(_osTabAtiva);
+}
+
+function cruzarOS() {
+  _osCruzamento = [];
+  const nfMeu = baseNF.filter(r => !r.setor || r.setor === PORTAL_SETOR);
+  const nfPorOS = {};
+  const nfUsadas = new Set();
+
+  nfMeu.forEach((nf, idx) => {
+    const n = (nf.os || '').toString().trim();
+    if (n) { if (!nfPorOS[n]) nfPorOS[n] = []; nfPorOS[n].push({ nf, idx }); }
+  });
+
+  osDB.forEach((os, osIdx) => {
+    const num = (os.numero || '').toString().trim();
+    const tol = (parseFloat(os.tolerancia) || 5) / 100;
+    const matches = nfPorOS[num] || [];
+
+    if (matches.length === 0) {
+      // Tenta match por fornecedor + valor
+      const vmatch = nfMeu.find((nf, idx) => {
+        if (nfUsadas.has(idx)) return false;
+        const vNF = parseFloat(nf.valor) || 0;
+        const vOS = parseFloat(os.valor) || 0;
+        const fornMatch = os.fornecedor && nf.fornecedor && nf.fornecedor.toLowerCase().includes(os.fornecedor.trim().toLowerCase().split(' ')[0]);
+        const valMatch  = vOS > 0 && Math.abs(vNF - vOS) / vOS <= tol;
+        return fornMatch && valMatch;
+      });
+      if (vmatch) {
+        const vIdx = nfMeu.indexOf(vmatch);
+        nfUsadas.add(vIdx);
+        const vDiff = Math.abs((parseFloat(vmatch.valor)||0) - (parseFloat(os.valor)||0));
+        _osCruzamento.push({ os, osIdx, nf:vmatch, tipo:'match_val', status:'OK (val+forn)', diff: vDiff });
+      } else {
+        _osCruzamento.push({ os, osIdx, nf:null, tipo:'sem_nf', status:'Sem NF' });
+      }
+    } else {
+      matches.forEach(({ nf, idx }) => {
+        nfUsadas.add(idx);
+        const vNF = parseFloat(nf.valor) || 0;
+        const vOS = parseFloat(os.valor) || 0;
+        const diff = Math.abs(vNF - vOS);
+        const pct  = vOS > 0 ? diff / vOS : 0;
+        const fornMatch = !os.fornecedor || !nf.fornecedor || nf.fornecedor.toLowerCase().includes(os.fornecedor.trim().toLowerCase().split(' ')[0]);
+        let status = 'OK';
+        if (pct > tol) status = 'Divergência de Valor';
+        else if (!fornMatch) status = 'Divergência de Fornecedor';
+        _osCruzamento.push({ os, osIdx, nf, tipo: status === 'OK' ? 'ok' : 'divergencia', status, diff, pct });
+      });
+    }
+  });
+
+  // NFs com OS mas OS não cadastrada
+  Object.entries(nfPorOS).forEach(([num, items]) => {
+    if (!osDB.find(o => (o.numero||'').toString().trim() === num)) {
+      items.filter(({ idx }) => !nfUsadas.has(idx)).forEach(({ nf }) => {
+        _osCruzamento.push({ os: null, nf, tipo:'sem_os', status:'Sem OS', osNum: num });
+      });
+    }
+  });
+}
+
+function renderOSKPIs() {
+  const total = osDB.length;
+  const ok    = _osCruzamento.filter(r => r.tipo === 'ok' || r.tipo === 'match_val').length;
+  const div   = _osCruzamento.filter(r => r.tipo === 'divergencia').length;
+  const semNF = _osCruzamento.filter(r => r.tipo === 'sem_nf').length;
+  setText('os-k-total', total.toLocaleString('pt-BR'));
+  setText('os-k-ok',    ok.toLocaleString('pt-BR'));
+  setText('os-k-div',   div.toLocaleString('pt-BR'));
+  setText('os-k-sem',   semNF.toLocaleString('pt-BR'));
+}
+
+function osShowTab(tab) {
+  _osTabAtiva = tab;
+  ['cruz','lista','semos'].forEach(t => {
+    const btn = document.getElementById('ostab-'+t);
+    const el  = document.getElementById('ostab-'+t+'-content');
+    if (btn) btn.classList.toggle('active', t === tab);
+    if (el)  el.style.display = t === tab ? '' : 'none';
+  });
+  if (tab === 'cruz')  renderCruzamento();
+  if (tab === 'lista') renderListaOS();
+  if (tab === 'semos') renderSemOS();
+}
+
+function filtrarCruzamento() {
+  renderCruzamento();
+}
+
+function renderCruzamento() {
+  const el = document.getElementById('os-cruzamento-table'); if (!el) return;
+  const busca   = (document.getElementById('os-busca')?.value || '').toLowerCase();
+  const filtro  = document.getElementById('os-filtro-status')?.value || '';
+
+  let rows = _osCruzamento.filter(r => {
+    if (filtro) {
+      if (filtro === 'OK' && r.tipo !== 'ok' && r.tipo !== 'match_val') return false;
+      if (filtro === 'Divergência' && r.tipo !== 'divergencia') return false;
+      if (filtro === 'Sem NF' && r.tipo !== 'sem_nf') return false;
+      if (filtro === 'Sem OS' && r.tipo !== 'sem_os') return false;
+    }
+    if (busca) {
+      const txt = [(r.os?.numero||''),(r.os?.fornecedor||''),(r.nf?.fornecedor||''),(r.osNum||''),(r.os?.valor||''),(r.nf?.valor||'')].join(' ').toLowerCase();
+      if (!txt.includes(busca)) return false;
+    }
+    return true;
+  });
+
+  if (!rows.length) { el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">Nenhum resultado encontrado.</div>'; return; }
+
+  const statusClass = { ok:'os-status-ok', match_val:'os-status-ok', divergencia:'os-status-div', sem_nf:'os-status-sem', sem_os:'os-status-nf' };
+  const statusIcon  = { ok:'✅', match_val:'✅', divergencia:'⚠️', sem_nf:'🔴', sem_os:'🔵' };
+
+  el.innerHTML = `<div style="overflow-x:auto;"><table class="table" style="font-size:12px;width:100%;">
+    <thead><tr>
+      <th>Status</th><th>Nº OS</th><th>Fornecedor OS</th><th>Valor OS</th>
+      <th>Chave/NF</th><th>Fornecedor NF</th><th>Valor NF</th><th>Diferença</th><th></th>
+    </tr></thead>
+    <tbody>${rows.map((r,i) => {
+      const vOS = r.os ? (parseFloat(r.os.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—';
+      const vNF = r.nf ? (parseFloat(r.nf.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '—';
+      const diff = r.diff !== undefined ? `<span class="${r.diff > 0 ? 'os-diff-pos':'os-diff-ok'}">R$ ${r.diff.toLocaleString('pt-BR',{minimumFractionDigits:2})} (${((r.pct||0)*100).toFixed(1)}%)</span>` : '—';
+      const acoes = r.tipo === 'sem_os'
+        ? `<button class="btn btn-sm btn-secondary" style="font-size:10px;" onclick="criarOSdaNF(${baseNF.indexOf(r.nf)})">+ Criar OS</button>`
+        : r.osIdx >= 0 ? `<button class="btn btn-sm btn-secondary" style="font-size:10px;" onclick="abrirModalOS(${r.osIdx})">✏️</button>` : '';
+      return `<tr>
+        <td><span class="os-badge ${statusClass[r.tipo]||''}">${statusIcon[r.tipo]||''} ${r.status}</span></td>
+        <td style="font-weight:700;">${r.os?.numero || r.osNum || '—'}</td>
+        <td>${r.os?.fornecedor || '—'}</td>
+        <td style="font-variant-numeric:tabular-nums;">R$ ${vOS}</td>
+        <td style="font-size:10px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;">${r.nf?.chave || r.nf?.nf || '—'}</td>
+        <td>${r.nf?.fornecedor || r.nf?.emitente || '—'}</td>
+        <td style="font-variant-numeric:tabular-nums;">R$ ${vNF}</td>
+        <td>${diff}</td>
+        <td>${acoes}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+function renderListaOS() {
+  const el = document.getElementById('os-lista-table'); if (!el) return;
+  if (!osDB.length) {
+    el.innerHTML = '<div style="text-align:center;padding:48px;color:var(--muted);">Nenhuma OS cadastrada.<br><button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="abrirModalOS()">+ Nova OS</button></div>';
+    return;
+  }
+  const statusCor = { 'Aberta':'var(--blue-tx)', 'Em andamento':'var(--orange-tx)', 'Concluída':'var(--green-tx)', 'Cancelada':'var(--red-tx)' };
+  el.innerHTML = `<div style="overflow-x:auto;"><table class="table" style="font-size:12px;width:100%;">
+    <thead><tr><th>Nº OS</th><th>Descrição</th><th>Fornecedor</th><th>Valor</th><th>Data</th><th>Status</th><th>Tolerância</th><th></th></tr></thead>
+    <tbody>${osDB.map((os,i) => `<tr>
+      <td style="font-weight:700;">${os.numero||'—'}</td>
+      <td>${os.descricao||'—'}</td>
+      <td>${os.fornecedor||'—'}</td>
+      <td style="font-variant-numeric:tabular-nums;">R$ ${(parseFloat(os.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td>${os.data||'—'}</td>
+      <td><span style="font-size:10px;font-weight:700;color:${statusCor[os.status]||'var(--muted)'};">${os.status||'—'}</span></td>
+      <td style="text-align:center;">±${os.tolerancia||5}%</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-sm btn-secondary" style="font-size:10px;margin-right:4px;" onclick="abrirModalOS(${i})">✏️</button>
+        <button class="btn btn-sm btn-secondary" style="font-size:10px;color:var(--red-tx);" onclick="excluirOS(${i})">🗑️</button>
+      </td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function renderSemOS() {
+  const el = document.getElementById('os-semos-table'); if (!el) return;
+  const sem = _osCruzamento.filter(r => r.tipo === 'sem_os');
+  if (!sem.length) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--green-tx);font-weight:600;">✅ Todas as NFs com OS têm correspondência cadastrada.</div>';
+    return;
+  }
+  el.innerHTML = `<div style="overflow-x:auto;"><table class="table" style="font-size:12px;width:100%;">
+    <thead><tr><th>OS Referenciada</th><th>Fornecedor NF</th><th>Valor NF</th><th>Data NF</th><th>Situação</th><th></th></tr></thead>
+    <tbody>${sem.map(r => `<tr>
+      <td style="font-weight:700;color:var(--blue-tx);">${r.osNum||'—'}</td>
+      <td>${r.nf?.fornecedor||r.nf?.emitente||'—'}</td>
+      <td style="font-variant-numeric:tabular-nums;">R$ ${(parseFloat(r.nf?.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+      <td>${r.nf?.data||'—'}</td>
+      <td>${r.nf?.situacao||'—'}</td>
+      <td><button class="btn btn-sm btn-secondary" style="font-size:10px;" onclick="criarOSdaNF(${baseNF.indexOf(r.nf)})">+ Criar OS</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+function abrirModalOS(idx) {
+  _osEditIdx = idx >= 0 ? idx : -1;
+  const os = idx >= 0 ? osDB[idx] : {};
+  document.getElementById('modal-os-titulo').textContent = idx >= 0 ? 'Editar OS' : 'Nova Ordem de Serviço';
+  document.getElementById('os-f-numero').value     = os.numero     || '';
+  document.getElementById('os-f-fornecedor').value = os.fornecedor || '';
+  document.getElementById('os-f-valor').value      = os.valor      || '';
+  document.getElementById('os-f-data').value       = os.data       || '';
+  document.getElementById('os-f-status').value     = os.status     || 'Aberta';
+  document.getElementById('os-f-tolerancia').value = os.tolerancia || 5;
+  document.getElementById('os-f-descricao').value  = os.descricao  || '';
+  document.getElementById('os-f-obs').value        = os.obs        || '';
+  document.getElementById('modal-os').style.display = '';
+}
+
+function fecharModalOS() { document.getElementById('modal-os').style.display = 'none'; }
+
+function salvarModalOS() {
+  const numero = document.getElementById('os-f-numero').value.trim();
+  if (!numero) { showToast('Número da OS é obrigatório.'); return; }
+  const os = {
+    numero,
+    fornecedor: document.getElementById('os-f-fornecedor').value.trim(),
+    valor:      parseFloat(document.getElementById('os-f-valor').value) || 0,
+    data:       document.getElementById('os-f-data').value,
+    status:     document.getElementById('os-f-status').value,
+    tolerancia: parseFloat(document.getElementById('os-f-tolerancia').value) || 5,
+    descricao:  document.getElementById('os-f-descricao').value.trim(),
+    obs:        document.getElementById('os-f-obs').value.trim(),
+    id:         _osEditIdx >= 0 ? osDB[_osEditIdx].id : 'os_'+Date.now(),
+  };
+  if (_osEditIdx >= 0) { osDB[_osEditIdx] = os; }
+  else { osDB.push(os); }
+  salvarOSLocal();
+  fecharModalOS();
+  buildPageOS();
+  showToast(_osEditIdx >= 0 ? 'OS atualizada!' : 'OS cadastrada!');
+}
+
+function excluirOS(idx) {
+  if (!confirm('Excluir esta OS?')) return;
+  osDB.splice(idx, 1);
+  salvarOSLocal();
+  buildPageOS();
+  showToast('OS excluída.');
+}
+
+function criarOSdaNF(nfIdx) {
+  const nf = baseNF[nfIdx]; if (!nf) return;
+  abrirModalOS(-1);
+  document.getElementById('os-f-numero').value     = nf.os || '';
+  document.getElementById('os-f-fornecedor').value = nf.fornecedor || nf.emitente || '';
+  document.getElementById('os-f-valor').value      = parseFloat(nf.valor) || '';
+  document.getElementById('os-f-data').value       = nf.data || '';
+}
+
+function importarOSExcel() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.xlsx,.xls,.csv';
+  inp.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, {type:'binary'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+        let count = 0;
+        rows.forEach(row => {
+          const numero = (row['OS'] || row['Numero'] || row['Número'] || row['numero'] || row['N° OS'] || '').toString().trim();
+          if (!numero) return;
+          if (osDB.find(o => o.numero === numero)) return;
+          osDB.push({
+            id:'os_'+Date.now()+'_'+count,
+            numero,
+            fornecedor: (row['Fornecedor'] || row['fornecedor'] || '').toString().trim(),
+            valor:      parseFloat((row['Valor'] || row['valor'] || '0').toString().replace(',','.')) || 0,
+            data:       (row['Data'] || row['data'] || '').toString().trim(),
+            status:     (row['Status'] || row['status'] || 'Aberta').toString().trim(),
+            tolerancia: parseFloat(row['Tolerancia'] || row['Tolerância'] || 5) || 5,
+            descricao:  (row['Descricao'] || row['Descrição'] || row['Servico'] || '').toString().trim(),
+            obs:        (row['Obs'] || row['Observacao'] || '').toString().trim(),
+          });
+          count++;
+        });
+        salvarOSLocal();
+        buildPageOS();
+        showToast(count + ' OS importadas!');
+      } catch(err) { showToast('Erro ao ler Excel: ' + err.message); }
+    };
+    reader.readAsBinaryString(file);
+  };
+  inp.click();
+}
+
+function exportarOSExcel() {
+  if (!osDB.length) { showToast('Nenhuma OS para exportar.'); return; }
+  const rows = osDB.map(os => ({
+    'Nº OS': os.numero, 'Descrição': os.descricao, 'Fornecedor': os.fornecedor,
+    'Valor': os.valor, 'Data': os.data, 'Status': os.status, 'Tolerância (%)': os.tolerancia, 'Obs': os.obs
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ordens de Serviço');
+  XLSX.writeFile(wb, 'ordens_de_servico.xlsx');
+}
+
 function buildPageAgentes() {
   // Agente OS: conta NFs com OS vs sem OS
   const comOS  = baseNF.filter(r => r.os && r.os.trim() && r.situacao !== 'Cancelado').length;
@@ -3643,8 +4094,8 @@ function goToBase(filtros = {}) {
 // NAV
 // ============================================================
 // Páginas acessíveis por nível
-const PAGE_ADMIN    = ['dashboard','registros','automacoes','verificar','importar','mapeamento','colunas','usuarios','auditoria','ni-lote','vencimentos','operadores','agentes'];
-const PAGE_FISCAL   = ['dashboard','registros','automacoes','verificar','importar','mapeamento','vencimentos','agentes'];
+const PAGE_ADMIN    = ['dashboard','registros','automacoes','verificar','importar','mapeamento','colunas','usuarios','auditoria','ni-lote','vencimentos','operadores','agentes','ordemservico'];
+const PAGE_FISCAL   = ['dashboard','registros','automacoes','verificar','importar','mapeamento','vencimentos','agentes','ordemservico'];
 const PAGE_GERENCIA = ['dashboard','registros','automacoes','vencimentos'];
 const PAGE_SETOR    = ['registros','verificar','automacoes','vencimentos'];
 
@@ -3674,7 +4125,8 @@ function showPage(page) {
   if (page === 'ni-lote')     buildPageNiLote();
   if (page === 'vencimentos') buildPageVencimentos();
   if (page === 'operadores')  buildPageOperadores();
-  if (page === 'agentes')     buildPageAgentes();
+  if (page === 'ordemservico') buildPageOS();
+  if (page === 'agentes')      buildPageAgentes();
 }
 
 // ============================================================
