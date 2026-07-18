@@ -7,7 +7,7 @@ import os, json, threading, shutil, datetime, requests as req_lib
 
 app     = Flask(__name__)
 BASE    = os.path.dirname(os.path.abspath(__file__))
-ALLOWED = {'base.json', 'users.json', 'mapeamento.json', 'cfg.json'}
+ALLOWED = {'base.json', 'users.json', 'mapeamento.json', 'cfg.json', 'os.json', 'pendencias.json'}
 
 WRITE_TOKEN = os.environ.get('PORTAL_TOKEN', 'transmaroni-portal-2025')
 _write_lock = threading.Lock()

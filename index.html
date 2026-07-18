@@ -213,6 +213,11 @@ tr:hover td{background:rgba(0,0,0,.025)}
 .os-tab-bar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px;}
 .os-diff-pos{color:var(--red-tx);font-weight:700;}
 .os-diff-ok{color:var(--green-tx);font-weight:700;}
+.pen-op-card{cursor:pointer;transition:box-shadow .15s,transform .1s;}
+.pen-op-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.12);transform:translateY(-2px);}
+.pen-hist-item{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);}
+.pen-hist-item:last-child{border-bottom:none;}
+.sig-pad{border:2px dashed var(--border);border-radius:8px;background:#fff;cursor:crosshair;touch-action:none;display:block;width:100%;}
 @keyframes pulse-yellow { 0%,100%{opacity:1} 50%{opacity:.3} }
 .sync-saving { animation: pulse-yellow 1s infinite; }
 /* ── AUTH ── */
@@ -992,6 +997,151 @@ tr:hover td{background:rgba(0,0,0,.025)}
 </div>
 
 <!-- ===== USUÁRIOS (admin only) ===== -->
+<!-- ===== COMUNICAÇÃO / PENDÊNCIAS ===== -->
+<div id="page-comunicacao" class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <div id="pen-bread" style="display:none;margin-bottom:6px;">
+        <button class="btn btn-secondary btn-sm" onclick="voltarGridOps()">← Todos os operadores</button>
+        <span id="pen-bread-nome" style="margin-left:8px;font-weight:600;"></span>
+      </div>
+      <h2 id="pen-titulo">Central de Pendências</h2>
+      <p id="pen-sub">Encaminhe NFs para operadores e acompanhe entrega de documentos e boletos</p>
+    </div>
+    <div style="display:flex;gap:8px;" id="pen-header-btn">
+      <button class="btn btn-primary btn-sm" onclick="abrirModalEnc()">+ Encaminhar NF</button>
+    </div>
+  </div>
+
+  <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+    <div class="kpi-card" style="--kpi-color:var(--accent);"><div class="kpi-label">Total</div><div class="kpi-value" id="pen-k-tot">0</div><div class="kpi-sub">pendências</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--blue);"><div class="kpi-label">Encaminhadas</div><div class="kpi-value" id="pen-k-enc">0</div><div class="kpi-sub">aguardando boleto</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--yellow);"><div class="kpi-label">Boleto Anexado</div><div class="kpi-value" id="pen-k-bol">0</div><div class="kpi-sub">aguardando conclusão</div></div>
+    <div class="kpi-card" style="--kpi-color:var(--green);"><div class="kpi-label">Concluídas</div><div class="kpi-value" id="pen-k-con">0</div><div class="kpi-sub">finalizadas</div></div>
+  </div>
+
+  <div id="pen-grid-view">
+    <div id="pen-ops-grid"></div>
+  </div>
+
+  <div id="pen-pasta-view" style="display:none;">
+    <div class="os-tab-bar">
+      <button class="os-tab active" id="pentab-enc" onclick="penAba('enc')">🔴 Pendentes</button>
+      <button class="os-tab" id="pentab-bol" onclick="penAba('bol')">📎 Com Boleto</button>
+      <button class="os-tab" id="pentab-con" onclick="penAba('con')">✅ Concluídas</button>
+    </div>
+    <div id="pen-pasta-content"></div>
+  </div>
+</div>
+
+<!-- MODAL: Encaminhar NF -->
+<div id="modal-enc" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalEnc()">
+  <div class="modal" style="max-width:560px;width:96%;">
+    <div class="modal-header"><div class="modal-title">Encaminhar NF para Operador</div><button class="modal-close" onclick="fecharModalEnc()">✕</button></div>
+    <div class="modal-body" style="display:grid;gap:12px;">
+      <div class="auth-field">
+        <label>Buscar e selecionar NF</label>
+        <input type="text" id="enc-busca" placeholder="Fornecedor, valor, situação..." oninput="filtrarNFEnc()">
+      </div>
+      <div id="enc-nf-lista" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
+      <div id="enc-nf-sel" style="display:none;padding:8px 12px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;font-size:12px;"></div>
+      <div class="auth-field">
+        <label>Operador *</label>
+        <select id="enc-op-sel"><option value="">Selecione o operador...</option></select>
+      </div>
+      <div class="auth-field">
+        <label>Mensagem / Pendência</label>
+        <textarea id="enc-msg" rows="3" placeholder="Descreva a pendência para o operador..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;font-size:13px;"></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div class="auth-field" style="margin:0;">
+          <label style="font-size:11px;">📄 NF (PDF)</label>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('enc-inp-nf').click()" style="width:100%;">Anexar</button>
+          <div id="enc-nf-nome" style="font-size:10px;color:var(--muted);margin-top:3px;"></div>
+          <input type="file" id="enc-inp-nf" accept=".pdf" style="display:none" onchange="lerDocEnc('nf')">
+        </div>
+        <div class="auth-field" style="margin:0;">
+          <label style="font-size:11px;">🔧 OS (PDF)</label>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('enc-inp-os').click()" style="width:100%;">Anexar</button>
+          <div id="enc-os-nome" style="font-size:10px;color:var(--muted);margin-top:3px;"></div>
+          <input type="file" id="enc-inp-os" accept=".pdf" style="display:none" onchange="lerDocEnc('os')">
+        </div>
+        <div class="auth-field" style="margin:0;">
+          <label style="font-size:11px;">📎 Outro</label>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('enc-inp-out').click()" style="width:100%;">Anexar</button>
+          <div id="enc-out-nome" style="font-size:10px;color:var(--muted);margin-top:3px;"></div>
+          <input type="file" id="enc-inp-out" accept=".pdf" style="display:none" onchange="lerDocEnc('outro')">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="fecharModalEnc()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmarEnc()">Encaminhar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Anexar Boleto -->
+<div id="modal-boleto" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalBoleto()">
+  <div class="modal" style="max-width:440px;width:96%;">
+    <div class="modal-header"><div class="modal-title">📎 Anexar Boleto</div><button class="modal-close" onclick="fecharModalBoleto()">✕</button></div>
+    <div class="modal-body" style="display:grid;gap:14px;">
+      <div id="boleto-info" style="background:var(--bg);padding:12px;border-radius:8px;font-size:13px;"></div>
+      <div class="auth-field">
+        <label>Boleto (PDF) *</label>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bol-inp').click()">Selecionar PDF do Boleto</button>
+        <div id="bol-inp-nome" style="font-size:10px;color:var(--muted);margin-top:4px;"></div>
+        <input type="file" id="bol-inp" accept=".pdf" style="display:none" onchange="lerDocBoleto()">
+      </div>
+      <div class="auth-field">
+        <label>Observação</label>
+        <input type="text" id="bol-obs" placeholder="Ex: Boleto com desconto de R$ 50,00...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="fecharModalBoleto()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmarBoleto()">Salvar Boleto</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Assinatura Digital -->
+<div id="modal-assin" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalAssin()">
+  <div class="modal" style="max-width:480px;width:96%;">
+    <div class="modal-header"><div class="modal-title">✍ Assinatura Digital</div><button class="modal-close" onclick="fecharModalAssin()">✕</button></div>
+    <div class="modal-body" style="display:grid;gap:12px;">
+      <div style="font-size:12px;color:var(--muted);">Assine abaixo com o mouse ou toque na tela para confirmar o recebimento dos documentos.</div>
+      <canvas id="sig-canvas" class="sig-pad" height="160" style="height:160px;"></canvas>
+      <button class="btn btn-secondary btn-sm" onclick="limparSig()" style="align-self:flex-start;">🗑 Limpar</button>
+      <div class="auth-field">
+        <label>Nome do signatário</label>
+        <input type="text" id="sig-nome" placeholder="Nome completo">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="fecharModalAssin()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmarAssin()">Confirmar Assinatura</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Ver Documentos -->
+<div id="modal-docs-pen" class="modal-overlay" style="display:none;" onclick="if(event.target===this)document.getElementById('modal-docs-pen').style.display='none'">
+  <div class="modal" style="max-width:540px;width:96%;">
+    <div class="modal-header"><div class="modal-title">📁 Documentos da Pendência</div><button class="modal-close" onclick="document.getElementById('modal-docs-pen').style.display='none'">✕</button></div>
+    <div class="modal-body">
+      <div id="mdp-info" style="margin-bottom:14px;padding:12px;background:var(--bg);border-radius:8px;font-size:13px;line-height:1.7;"></div>
+      <div id="mdp-docs" style="display:grid;gap:8px;"></div>
+      <div id="mdp-sig" style="margin-top:14px;"></div>
+      <div id="mdp-hist" style="margin-top:14px;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('modal-docs-pen').style.display='none'">Fechar</button>
+      <button class="btn btn-primary btn-sm" onclick="baixarTodosPen()">⬇ Baixar Tudo</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== ORDEM DE SERVIÇO ===== -->
 <div id="page-ordemservico" class="page">
   <div class="page-header">
@@ -1917,6 +2067,7 @@ function buildNav() {
       item('vencimentos',  '⏰', 'Vencimentos'),
       item('operadores',   '👷', 'Operadores'),
       item('ordemservico', '🔧', 'Ordens de Serviço'),
+      item('comunicacao',  '💬', 'Pendências'),
       item('agentes',      '🤖', 'Agentes IA'),
       section('Operação'),
       item('importar',     '📥', 'Importar & Processar'),
@@ -1938,6 +2089,7 @@ function buildNav() {
       section('Controle'),
       item('vencimentos', '⏰', 'Vencimentos'),
       item('ordemservico','🔧', 'Ordens de Serviço'),
+      item('comunicacao', '💬', 'Pendências'),
       item('agentes',     '🤖', 'Agentes IA'),
       section('Operação'),
       item('importar',    '📥', 'Importar & Processar'),
@@ -2041,6 +2193,379 @@ function classificarVerificar(chave) {
 // INIT — verifica auth antes de montar o portal
 // ============================================================
 // ── ORDEM DE SERVIÇO ────────────────────────────────────────
+// ── CENTRAL DE PENDÊNCIAS ─────────────────────────────────────
+const SK_PEN = 'portal_pendencias_manutencao';
+let penDB = [];
+let _penViewOp = null;
+let _penAbaAtv = 'enc';
+let _encNFSel  = null;
+let _encDocs   = {};
+let _bolDoc    = null;
+let _bolPenId  = null;
+let _sigPenId  = null;
+let _mdpPenId  = null;
+let _sigCanvas, _sigCtx, _sigDrawing = false;
+let _penUsuarios = [];
+
+function carregarPen() {
+  try { penDB = JSON.parse(localStorage.getItem(SK_PEN) || '[]'); } catch(e) { penDB = []; }
+}
+function salvarPenLocal() {
+  localStorage.setItem(SK_PEN, JSON.stringify(penDB));
+}
+
+async function buildPageCom() {
+  carregarPen();
+  try { const u = await getUsuarios(); _penUsuarios = Array.isArray(u) ? u : []; } catch(e) { _penUsuarios = []; }
+  _penViewOp = null;
+  document.getElementById('pen-grid-view').style.display  = '';
+  document.getElementById('pen-pasta-view').style.display = 'none';
+  document.getElementById('pen-bread').style.display      = 'none';
+  setText('pen-titulo', 'Central de Pendências');
+  renderPenKPIs();
+  renderGridOps();
+}
+
+function renderPenKPIs() {
+  const mine = currentUser.nivel === 'operador' ? penDB.filter(p => p.operador === currentUser.login) : penDB;
+  setText('pen-k-tot', mine.length);
+  setText('pen-k-enc', mine.filter(p => p.status === 'Encaminhada').length);
+  setText('pen-k-bol', mine.filter(p => p.status === 'Boleto Anexado').length);
+  setText('pen-k-con', mine.filter(p => p.status === 'Concluída').length);
+}
+
+function renderGridOps() {
+  if (currentUser.nivel === 'operador') { abrirPastaOp(currentUser.login, currentUser.nome); return; }
+  const el = document.getElementById('pen-ops-grid'); if (!el) return;
+  const map = {};
+  penDB.forEach(p => {
+    if (!map[p.operador]) map[p.operador] = { login: p.operador, nome: p.operadorNome, items: [] };
+    map[p.operador].items.push(p);
+  });
+  _penUsuarios.forEach(u => { if (!map[u.login]) map[u.login] = { login: u.login, nome: u.nome, items: [] }; });
+  const cards = Object.values(map);
+  if (!cards.length) {
+    el.innerHTML = '<div style="text-align:center;padding:48px;color:var(--muted);"><div style="font-size:48px;margin-bottom:12px;">📭</div><div style="font-weight:600;font-size:15px;">Nenhuma pendência encaminhada.</div><button class="btn btn-primary btn-sm" style="margin-top:16px;" onclick="abrirModalEnc()">+ Encaminhar NF</button></div>';
+    return;
+  }
+  el.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;">' +
+    cards.map(op => {
+      const pend = op.items.filter(p => p.status === 'Encaminhada').length;
+      const bol  = op.items.filter(p => p.status === 'Boleto Anexado').length;
+      const conc = op.items.filter(p => p.status === 'Concluída').length;
+      const cor  = pend > 0 ? 'var(--red)' : bol > 0 ? 'var(--yellow)' : 'var(--green)';
+      return '<div class="card pen-op-card" style="border-left:4px solid ' + cor + ';" onclick="abrirPastaOp(\'' + op.login.replace(/'/g,"\\'") + '\',\'' + op.nome.replace(/'/g,"\\'") + '\')">' +
+        '<div style="font-size:28px;margin-bottom:8px;">👤</div>' +
+        '<div style="font-weight:700;margin-bottom:8px;">' + op.nome + '</div>' +
+        '<div style="font-size:11px;line-height:1.9;">' +
+        (pend > 0 ? '<span style="color:var(--red-tx);">🔴 ' + pend + ' Pendente' + (pend>1?'s':'') + '</span><br>' : '') +
+        (bol  > 0 ? '<span style="color:var(--orange-tx);">📎 ' + bol  + ' Com Boleto</span><br>' : '') +
+        (conc > 0 ? '<span style="color:var(--green-tx);">✅ ' + conc + ' Concluída' + (conc>1?'s':'') + '</span><br>' : '') +
+        (op.items.length === 0 ? '<span style="color:var(--muted);">Sem pendências</span>' : '') +
+        '</div></div>';
+    }).join('') + '</div>';
+}
+
+function abrirPastaOp(login, nome) {
+  _penViewOp = login;
+  document.getElementById('pen-grid-view').style.display  = 'none';
+  document.getElementById('pen-pasta-view').style.display = '';
+  if (currentUser.nivel !== 'operador') {
+    document.getElementById('pen-bread').style.display = '';
+    setText('pen-bread-nome', nome);
+  }
+  setText('pen-titulo', 'Pasta: ' + nome);
+  penAba('enc');
+}
+
+function voltarGridOps() {
+  _penViewOp = null;
+  document.getElementById('pen-grid-view').style.display  = '';
+  document.getElementById('pen-pasta-view').style.display = 'none';
+  document.getElementById('pen-bread').style.display      = 'none';
+  setText('pen-titulo', 'Central de Pendências');
+  renderGridOps();
+}
+
+function penAba(aba) {
+  _penAbaAtv = aba;
+  ['enc','bol','con'].forEach(t => {
+    const b = document.getElementById('pentab-' + t);
+    if (b) b.classList.toggle('active', t === aba);
+  });
+  renderPastaContent();
+}
+
+function renderPastaContent() {
+  const el = document.getElementById('pen-pasta-content'); if (!el) return;
+  const login = _penViewOp || currentUser.login;
+  const statusMap = { enc: ['Encaminhada'], bol: ['Boleto Anexado'], con: ['Concluída','Cancelada'] };
+  const allowed   = statusMap[_penAbaAtv] || [];
+  const items     = penDB.filter(p => p.operador === login && allowed.includes(p.status));
+  if (!items.length) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);">Nenhuma pendência nesta categoria.</div>';
+    return;
+  }
+  const statusCor = { 'Encaminhada':'var(--blue-tx)', 'Boleto Anexado':'var(--orange-tx)', 'Concluída':'var(--green-tx)', 'Cancelada':'var(--red-tx)' };
+  el.innerHTML = '<div style="overflow-x:auto;"><table class="table" style="font-size:12px;width:100%;"><thead><tr>' +
+    '<th>Data</th><th>Fornecedor</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>Mensagem</th><th>Docs</th><th>Ações</th>' +
+    '</tr></thead><tbody>' +
+    items.map(p => {
+      const hasNF  = !!(p.docs && p.docs.nf  && p.docs.nf.b64);
+      const hasBol = !!(p.docs && p.docs.boleto && p.docs.boleto.b64);
+      const hasOS  = !!(p.docs && p.docs.os  && p.docs.os.b64);
+      const hasSig = !!(p.assinatura && p.assinatura.img);
+      const acoes  = [];
+      if (p.status === 'Encaminhada') acoes.push('<button class="btn btn-sm btn-secondary" style="font-size:10px;" onclick="abrirModalBoleto(\'' + p.id + '\')">📎 Boleto</button>');
+      if (hasBol && !hasSig)         acoes.push('<button class="btn btn-sm btn-secondary" style="font-size:10px;" onclick="abrirModalAssin(\'' + p.id + '\')">✍ Assinar</button>');
+      if (hasSig && p.status === 'Boleto Anexado' && currentUser.nivel !== 'operador') acoes.push('<button class="btn btn-sm btn-primary" style="font-size:10px;" onclick="concluirPen(\'' + p.id + '\')">✅ Concluir</button>');
+      if (p.status !== 'Concluída' && currentUser.nivel !== 'operador') acoes.push('<button class="btn btn-sm btn-secondary" style="font-size:10px;color:var(--red-tx);" onclick="cancelarPen(\'' + p.id + '\')">✕</button>');
+      const docs = [(hasNF ? '📄' : ''), (hasOS ? '🔧' : ''), (hasBol ? '🧾' : ''), (hasSig ? '✍' : '')].filter(Boolean);
+      return '<tr>' +
+        '<td style="white-space:nowrap;">' + (p.dataEnc || '').substring(0,10) + '</td>' +
+        '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (p.nfRef.fornecedor||'') + '">' + (p.nfRef.fornecedor||'—') + '</td>' +
+        '<td style="font-variant-numeric:tabular-nums;white-space:nowrap;">R$ ' + (parseFloat(p.nfRef.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</td>' +
+        '<td style="white-space:nowrap;">' + (p.nfRef.vencimento||'—') + '</td>' +
+        '<td><span style="font-size:10px;font-weight:700;color:' + (statusCor[p.status]||'var(--muted)') + ';">' + p.status + '</span></td>' +
+        '<td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (p.mensagem||'') + '">' + (p.mensagem||'—') + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          (docs.length ? '<span style="cursor:pointer;" onclick="verDocsTodos(\'' + p.id + '\')">' + docs.join(' ') + '</span>' : '—') +
+          (docs.length ? ' <button class="btn btn-sm btn-secondary" style="font-size:9px;margin-left:3px;" onclick="verDocsTodos(\'' + p.id + '\')">Ver</button>' : '') +
+        '</td>' +
+        '<td style="white-space:nowrap;">' + acoes.join(' ') + '</td>' +
+      '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+// ── Encaminhar ────
+function abrirModalEnc() {
+  _encNFSel = null; _encDocs = {};
+  ['enc-busca','enc-msg'].forEach(id => { const e = document.getElementById(id); if(e) e.value = ''; });
+  ['enc-nf-nome','enc-os-nome','enc-out-nome'].forEach(id => { const e = document.getElementById(id); if(e) e.textContent = ''; });
+  ['enc-inp-nf','enc-inp-os','enc-inp-out'].forEach(id => { const e = document.getElementById(id); if(e) e.value = ''; });
+  document.getElementById('enc-nf-sel').style.display = 'none';
+  const sel = document.getElementById('enc-op-sel');
+  sel.innerHTML = '<option value="">Selecione o operador...</option>';
+  _penUsuarios.forEach(u => { const o = document.createElement('option'); o.value = u.login; o.textContent = u.nome + (u.setor ? ' (' + u.setor + ')' : ''); sel.appendChild(o); });
+  filtrarNFEnc();
+  document.getElementById('modal-enc').style.display = '';
+}
+function fecharModalEnc() { document.getElementById('modal-enc').style.display = 'none'; }
+
+function filtrarNFEnc() {
+  const el = document.getElementById('enc-nf-lista'); if (!el) return;
+  const busca = (document.getElementById('enc-busca')?.value || '').toLowerCase().trim();
+  const arr = (filteredBase && filteredBase.length ? filteredBase : baseNF);
+  const nfs = arr.filter(nf => {
+    if (!busca) return true;
+    return [(nf.fornecedor||''),(nf.emitente||''),(nf.chave||''),(nf.nf||''),(nf.valor||''),(nf.situacao||'')].join(' ').toLowerCase().includes(busca);
+  }).slice(0, 40);
+  if (!nfs.length) { el.innerHTML = '<div style="padding:10px;color:var(--muted);font-size:12px;">Nenhuma NF.</div>'; return; }
+  el.innerHTML = nfs.map(nf => {
+    const sel = _encNFSel === nf;
+    return '<div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12px;background:' + (sel?'rgba(59,130,246,.1)':'transparent') + ';" onclick="selecionarNFEnc(' + baseNF.indexOf(nf) + ')">' +
+      '<span style="font-weight:' + (sel?'700':'normal') + ';">' + (nf.fornecedor||nf.emitente||'Fornecedor') + '</span>' +
+      ' <span style="color:var(--muted);">· R$ ' + (parseFloat(nf.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) + ' · ' + (nf.situacao||'') + ' · ' + (nf.data||'') + '</span>' +
+    '</div>';
+  }).join('');
+}
+
+function selecionarNFEnc(idx) {
+  _encNFSel = baseNF[idx];
+  filtrarNFEnc();
+  const nf = _encNFSel;
+  const el = document.getElementById('enc-nf-sel');
+  el.style.display = '';
+  el.innerHTML = '<strong>✓ Selecionada:</strong> ' + (nf.fornecedor||nf.emitente||'—') + ' · R$ ' + (parseFloat(nf.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) + ' · Venc: ' + (nf.vencimento||'—');
+}
+
+function lerDocEnc(tipo) {
+  const idMap = { nf:'enc-inp-nf', os:'enc-inp-os', outro:'enc-inp-out' };
+  const nomeMap = { nf:'enc-nf-nome', os:'enc-os-nome', outro:'enc-out-nome' };
+  const inp = document.getElementById(idMap[tipo]); if (!inp || !inp.files[0]) return;
+  const file = inp.files[0];
+  if (file.size > 6*1024*1024) { showToast('Arquivo muito grande (máx 6MB).'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    _encDocs[tipo] = { nome: file.name, b64: e.target.result.split(',')[1] };
+    const el = document.getElementById(nomeMap[tipo]); if (el) el.textContent = '✓ ' + file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+function confirmarEnc() {
+  if (!_encNFSel) { showToast('Selecione uma NF.'); return; }
+  const opLogin = document.getElementById('enc-op-sel')?.value;
+  if (!opLogin) { showToast('Selecione um operador.'); return; }
+  const op = _penUsuarios.find(u => u.login === opLogin) || { nome: opLogin };
+  const mensagem = document.getElementById('enc-msg')?.value.trim() || '';
+  const pen = {
+    id: 'pen_' + Date.now(),
+    nfRef: { chave: _encNFSel.chave||'', nf: _encNFSel.nf||'', fornecedor: _encNFSel.fornecedor||_encNFSel.emitente||'', valor: _encNFSel.valor||0, data: _encNFSel.data||'', vencimento: _encNFSel.vencimento||'', situacao: _encNFSel.situacao||'' },
+    operador: opLogin, operadorNome: op.nome,
+    status: 'Encaminhada',
+    dataEnc: new Date().toISOString(),
+    encPor: currentUser.login, encPorNome: currentUser.nome,
+    mensagem,
+    docs: { nf: _encDocs.nf||null, os: _encDocs.os||null, outro: _encDocs.outro||null, boleto: null },
+    assinatura: null,
+    historico: [{ data: new Date().toISOString(), usuario: currentUser.nome, acao: 'Encaminhada', texto: mensagem }]
+  };
+  penDB.push(pen);
+  salvarPenLocal();
+  fecharModalEnc();
+  buildPageCom();
+  showToast('NF encaminhada para ' + op.nome + '!');
+}
+
+// ── Boleto ────
+function abrirModalBoleto(penId) {
+  _bolPenId = penId; _bolDoc = null;
+  const pen = penDB.find(p => p.id === penId); if (!pen) return;
+  document.getElementById('boleto-info').innerHTML =
+    '<div><strong>Fornecedor:</strong> ' + (pen.nfRef.fornecedor||'—') + '</div>' +
+    '<div><strong>Valor:</strong> R$ ' + (parseFloat(pen.nfRef.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</div>' +
+    '<div><strong>Vencimento:</strong> ' + (pen.nfRef.vencimento||'—') + '</div>' +
+    (pen.mensagem ? '<div><strong>Pendência:</strong> ' + pen.mensagem + '</div>' : '');
+  document.getElementById('bol-inp').value = '';
+  document.getElementById('bol-inp-nome').textContent = '';
+  document.getElementById('bol-obs').value = '';
+  document.getElementById('modal-boleto').style.display = '';
+}
+function fecharModalBoleto() { document.getElementById('modal-boleto').style.display = 'none'; }
+function lerDocBoleto() {
+  const inp = document.getElementById('bol-inp'); if (!inp || !inp.files[0]) return;
+  const file = inp.files[0];
+  if (file.size > 6*1024*1024) { showToast('Arquivo muito grande (máx 6MB).'); return; }
+  const reader = new FileReader();
+  reader.onload = e => { _bolDoc = { nome: file.name, b64: e.target.result.split(',')[1] }; document.getElementById('bol-inp-nome').textContent = '✓ ' + file.name; };
+  reader.readAsDataURL(file);
+}
+function confirmarBoleto() {
+  if (!_bolDoc) { showToast('Anexe o PDF do boleto.'); return; }
+  const pen = penDB.find(p => p.id === _bolPenId); if (!pen) return;
+  pen.docs.boleto = _bolDoc;
+  pen.status = 'Boleto Anexado';
+  const obs = document.getElementById('bol-obs')?.value || '';
+  pen.historico.push({ data: new Date().toISOString(), usuario: currentUser.nome, acao: 'Boleto Anexado', texto: obs });
+  salvarPenLocal();
+  fecharModalBoleto();
+  renderPastaContent();
+  renderPenKPIs();
+  showToast('Boleto salvo!');
+}
+
+// ── Assinatura Digital ────
+function abrirModalAssin(penId) {
+  _sigPenId = penId;
+  document.getElementById('sig-nome').value = currentUser.nome || '';
+  document.getElementById('modal-assin').style.display = '';
+  setTimeout(initSigCanvas, 80);
+}
+function fecharModalAssin() { document.getElementById('modal-assin').style.display = 'none'; }
+function initSigCanvas() {
+  const c = document.getElementById('sig-canvas'); if (!c) return;
+  const r = c.getBoundingClientRect();
+  c.width  = Math.round(r.width) || 440;
+  c.height = 160;
+  const nc = c.cloneNode(false); c.parentNode.replaceChild(nc, c);
+  _sigCanvas = nc; _sigDrawing = false;
+  _sigCtx = nc.getContext('2d');
+  _sigCtx.strokeStyle = '#111827'; _sigCtx.lineWidth = 2.5; _sigCtx.lineCap = 'round'; _sigCtx.lineJoin = 'round';
+  function pos(e) { const rb = nc.getBoundingClientRect(); const s = e.touches ? e.touches[0] : e; return { x:(s.clientX-rb.left)*(nc.width/rb.width), y:(s.clientY-rb.top)*(nc.height/rb.height) }; }
+  nc.addEventListener('mousedown',  e => { _sigDrawing=true; _sigCtx.beginPath(); const p=pos(e); _sigCtx.moveTo(p.x,p.y); });
+  nc.addEventListener('mousemove',  e => { if(!_sigDrawing) return; const p=pos(e); _sigCtx.lineTo(p.x,p.y); _sigCtx.stroke(); });
+  nc.addEventListener('mouseup',    () => _sigDrawing=false);
+  nc.addEventListener('mouseleave', () => _sigDrawing=false);
+  nc.addEventListener('touchstart', e => { e.preventDefault(); _sigDrawing=true; _sigCtx.beginPath(); const p=pos(e); _sigCtx.moveTo(p.x,p.y); }, {passive:false});
+  nc.addEventListener('touchmove',  e => { e.preventDefault(); if(!_sigDrawing)return; const p=pos(e); _sigCtx.lineTo(p.x,p.y); _sigCtx.stroke(); }, {passive:false});
+  nc.addEventListener('touchend',   () => _sigDrawing=false);
+}
+function limparSig() { if (_sigCtx && _sigCanvas) _sigCtx.clearRect(0,0,_sigCanvas.width,_sigCanvas.height); }
+function confirmarAssin() {
+  if (!_sigCanvas) return;
+  const data = _sigCtx.getImageData(0,0,_sigCanvas.width,_sigCanvas.height).data;
+  if (!data.some(v => v !== 0)) { showToast('Por favor assine no espaço acima.'); return; }
+  const img  = _sigCanvas.toDataURL('image/png');
+  const nome = (document.getElementById('sig-nome')?.value || '').trim() || currentUser.nome;
+  const pen  = penDB.find(p => p.id === _sigPenId); if (!pen) return;
+  pen.assinatura = { img, por: nome, data: new Date().toISOString() };
+  pen.historico.push({ data: new Date().toISOString(), usuario: nome, acao: 'Assinatura Digital', texto: '' });
+  salvarPenLocal();
+  fecharModalAssin();
+  renderPastaContent();
+  showToast('Assinatura registrada!');
+}
+
+// ── Concluir / Cancelar ────
+function concluirPen(penId) {
+  if (!confirm('Marcar como Concluída?')) return;
+  const pen = penDB.find(p => p.id === penId); if (!pen) return;
+  pen.status = 'Concluída';
+  pen.historico.push({ data: new Date().toISOString(), usuario: currentUser.nome, acao: 'Concluída', texto: '' });
+  salvarPenLocal(); renderPastaContent(); renderPenKPIs();
+  showToast('Pendência concluída!');
+}
+function cancelarPen(penId) {
+  if (!confirm('Cancelar esta pendência?')) return;
+  const pen = penDB.find(p => p.id === penId); if (!pen) return;
+  pen.status = 'Cancelada';
+  pen.historico.push({ data: new Date().toISOString(), usuario: currentUser.nome, acao: 'Cancelada', texto: '' });
+  salvarPenLocal(); renderPastaContent(); renderPenKPIs();
+  showToast('Pendência cancelada.');
+}
+
+// ── Ver Documentos ────
+function verDocPen(penId, tipo) {
+  const pen = penDB.find(p => p.id === penId); if (!pen) return;
+  const doc = pen.docs && pen.docs[tipo]; if (!doc || !doc.b64) return;
+  const bytes = atob(doc.b64);
+  const buf = new Uint8Array(bytes.length);
+  for (let i=0; i<bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+  const blob = new Blob([buf], {type:'application/pdf'});
+  window.open(URL.createObjectURL(blob), '_blank');
+}
+
+function verDocsTodos(penId) {
+  _mdpPenId = penId;
+  const pen = penDB.find(p => p.id === penId); if (!pen) return;
+  document.getElementById('mdp-info').innerHTML =
+    '<div><strong>Fornecedor:</strong> ' + (pen.nfRef.fornecedor||'—') + '</div>' +
+    '<div><strong>Valor:</strong> R$ ' + (parseFloat(pen.nfRef.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</div>' +
+    '<div><strong>Status:</strong> <strong>' + pen.status + '</strong></div>' +
+    '<div><strong>Encaminhado por:</strong> ' + (pen.encPorNome||'—') + ' em ' + (pen.dataEnc||'').substring(0,10) + '</div>' +
+    (pen.mensagem ? '<div><strong>Pendência:</strong> ' + pen.mensagem + '</div>' : '');
+  const tipos = [['nf','📄 Nota Fiscal'],['os','🔧 Ordem de Serviço'],['boleto','🧾 Boleto'],['outro','📎 Outro']];
+  document.getElementById('mdp-docs').innerHTML = tipos.map(([t, label]) => {
+    const doc = pen.docs && pen.docs[t];
+    if (!doc || !doc.b64) return '';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;">' +
+      '<div style="flex:1;"><div style="font-weight:600;">' + label + '</div><div style="font-size:11px;color:var(--muted);">' + (doc.nome||t+'.pdf') + '</div></div>' +
+      '<button class="btn btn-secondary btn-sm" style="font-size:11px;" onclick="verDocPen(\'' + pen.id + '\',\'' + t + '\')">👁 Ver</button>' +
+      '<button class="btn btn-secondary btn-sm" style="font-size:11px;" onclick="baixarDocPen(\'' + pen.id + '\',\'' + t + '\')">⬇</button>' +
+    '</div>';
+  }).join('');
+  const sigEl = document.getElementById('mdp-sig');
+  sigEl.innerHTML = pen.assinatura ? '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:4px;"><div style="font-weight:600;margin-bottom:8px;">✍ Assinatura Digital</div><img src="' + pen.assinatura.img + '" style="max-width:100%;border:1px solid var(--border);border-radius:4px;background:#fff;"><div style="font-size:11px;color:var(--muted);margin-top:6px;">Assinado por: <strong>' + pen.assinatura.por + '</strong> em ' + pen.assinatura.data.substring(0,10) + '</div></div>' : '';
+  const histEl = document.getElementById('mdp-hist');
+  histEl.innerHTML = pen.historico && pen.historico.length ? '<div style="margin-top:8px;"><div style="font-weight:600;font-size:12px;margin-bottom:6px;">Histórico</div>' + pen.historico.map(h => '<div class="pen-hist-item"><strong>' + h.usuario + '</strong> — ' + h.acao + (h.texto ? ': ' + h.texto : '') + ' <span style="float:right;">' + h.data.substring(0,10) + '</span></div>').join('') + '</div>' : '';
+  document.getElementById('modal-docs-pen').style.display = '';
+}
+
+function baixarDocPen(penId, tipo) {
+  const pen = penDB.find(p => p.id === penId); if (!pen) return;
+  const doc = pen.docs && pen.docs[tipo]; if (!doc || !doc.b64) return;
+  const a = document.createElement('a');
+  a.href = 'data:application/pdf;base64,' + doc.b64;
+  a.download = doc.nome || tipo + '.pdf';
+  a.click();
+}
+
+function baixarTodosPen() {
+  if (!_mdpPenId) return;
+  ['nf','os','boleto','outro'].forEach(t => baixarDocPen(_mdpPenId, t));
+}
+
 const SK_OS = 'portal_os_manutencao';
 let osDB = [];
 let _osCruzamento = [];
@@ -4094,8 +4619,8 @@ function goToBase(filtros = {}) {
 // NAV
 // ============================================================
 // Páginas acessíveis por nível
-const PAGE_ADMIN    = ['dashboard','registros','automacoes','verificar','importar','mapeamento','colunas','usuarios','auditoria','ni-lote','vencimentos','operadores','agentes','ordemservico'];
-const PAGE_FISCAL   = ['dashboard','registros','automacoes','verificar','importar','mapeamento','vencimentos','agentes','ordemservico'];
+const PAGE_ADMIN    = ['dashboard','registros','automacoes','verificar','importar','mapeamento','colunas','usuarios','auditoria','ni-lote','vencimentos','operadores','agentes','ordemservico','comunicacao'];
+const PAGE_FISCAL   = ['dashboard','registros','automacoes','verificar','importar','mapeamento','vencimentos','agentes','ordemservico','comunicacao'];
 const PAGE_GERENCIA = ['dashboard','registros','automacoes','vencimentos'];
 const PAGE_SETOR    = ['registros','verificar','automacoes','vencimentos'];
 
@@ -4126,6 +4651,7 @@ function showPage(page) {
   if (page === 'vencimentos') buildPageVencimentos();
   if (page === 'operadores')  buildPageOperadores();
   if (page === 'ordemservico') buildPageOS();
+  if (page === 'comunicacao')  buildPageCom();
   if (page === 'agentes')      buildPageAgentes();
 }
 

@@ -4,7 +4,7 @@
 param([int]$Port = 8080)
 
 $BASE_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ALLOWED  = @('/base.json', '/users.json', '/mapeamento.json', '/cfg.json')
+$ALLOWED  = @('/base.json', '/users.json', '/mapeamento.json', '/cfg.json', '/os.json', '/pendencias.json')
 
 # Descobre o IP local
 $IP = (Get-NetIPAddress -AddressFamily IPv4 |
