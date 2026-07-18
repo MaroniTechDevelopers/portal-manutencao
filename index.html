@@ -3136,8 +3136,8 @@ function buildPageAgentes() {
 }
 
 async function init() {
-  document.querySelector('aside').style.visibility = 'hidden';
-  document.querySelector('main').style.visibility  = 'hidden';
+  const _tni = document.getElementById('topnav'); if (_tni) _tni.style.visibility = 'hidden';
+  const _mni = document.querySelector('.main');   if (_mni) _mni.style.visibility  = 'hidden';
 
   // Modo rede: baixa users.json e mapeamento.json do servidor antes de tudo
   if (IS_SERVER) await syncFromServer();
