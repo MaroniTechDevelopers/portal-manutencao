@@ -218,6 +218,11 @@ tr:hover td{background:rgba(0,0,0,.025)}
 .pen-hist-item{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);}
 .pen-hist-item:last-child{border-bottom:none;}
 .sig-pad{border:2px dashed var(--border);border-radius:8px;background:#fff;cursor:crosshair;touch-action:none;display:block;width:100%;}
+.email-cap-item{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;}
+.email-cap-item:hover{background:var(--bg);}
+.email-cap-item.expanded{background:rgba(59,130,246,.05);}
+.att-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;transition:background .12s;}
+.att-chip:hover{background:rgba(59,130,246,.1);}
 @keyframes pulse-yellow { 0%,100%{opacity:1} 50%{opacity:.3} }
 .sync-saving { animation: pulse-yellow 1s infinite; }
 /* ── AUTH ── */
@@ -1125,6 +1130,57 @@ tr:hover td{background:rgba(0,0,0,.025)}
   </div>
 </div>
 
+<!-- MODAL: Captura de E-mails -->
+<div id="modal-email-cap" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharEmailCap()">
+  <div class="modal" style="max-width:700px;width:96%;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div class="modal-title">📧 Captura de E-mails — NFs e Boletos</div>
+      <button class="modal-close" onclick="fecharEmailCap()">✕</button>
+    </div>
+    <div class="modal-body" style="flex:1;overflow-y:auto;display:grid;gap:12px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" id="btn-escanear" onclick="escanearEmails()">🔍 Escanear E-mails</button>
+        <span id="email-cap-info" style="font-size:12px;color:var(--muted);">Busca e-mails com NF-e, NFS-e ou boleto na caixa de entrada configurada.</span>
+      </div>
+      <div id="email-cap-lista" style="border:1px solid var(--border);border-radius:8px;max-height:420px;overflow-y:auto;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="fecharEmailCap()">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Importar Anexo -->
+<div id="modal-imp-anexo" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharImpAnexo()">
+  <div class="modal" style="max-width:440px;width:96%;">
+    <div class="modal-header"><div class="modal-title">Importar PDF</div><button class="modal-close" onclick="fecharImpAnexo()">✕</button></div>
+    <div class="modal-body" style="display:grid;gap:12px;">
+      <div id="imp-anexo-nome" style="font-weight:600;padding:10px;background:var(--bg);border-radius:8px;font-size:13px;"></div>
+      <div class="auth-field">
+        <label>Tipo do documento</label>
+        <select id="imp-tipo">
+          <option value="nf">📄 Nota Fiscal (NF PDF)</option>
+          <option value="boleto">🧾 Boleto</option>
+          <option value="os">🔧 Ordem de Serviço</option>
+          <option value="outro">📎 Outro</option>
+        </select>
+      </div>
+      <div class="auth-field">
+        <label>Encaminhar para (opcional)</label>
+        <select id="imp-op"><option value="">— Não encaminhar agora —</option></select>
+      </div>
+      <div class="auth-field">
+        <label>Observação</label>
+        <input type="text" id="imp-obs" placeholder="Observação opcional...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="fecharImpAnexo()">Cancelar</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmarImpAnexo()">Importar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Ver Documentos -->
 <div id="modal-docs-pen" class="modal-overlay" style="display:none;" onclick="if(event.target===this)document.getElementById('modal-docs-pen').style.display='none'">
   <div class="modal" style="max-width:540px;width:96%;">
@@ -1303,6 +1359,9 @@ tr:hover td{background:rgba(0,0,0,.025)}
         <div>• E-mail monitorado: <span id="ag-email-conta" style="color:var(--text);">—</span></div>
         <div>• Filtros de assunto / remetente</div>
         <div>• Webhook Power Automate</div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary btn-sm" onclick="abrirEmailCap()">📧 Escanear E-mails</button>
       </div>
     </div>
 
@@ -2206,6 +2265,163 @@ let _sigPenId  = null;
 let _mdpPenId  = null;
 let _sigCanvas, _sigCtx, _sigDrawing = false;
 let _penUsuarios = [];
+
+// ── CAPTURA DE DOCUMENTOS (Microsoft Graph + Arquivei) ───────
+let _emailCapData   = [];
+let _emailExpanded  = {};
+let _impAnexoData   = null; // { msgId, attId, nome, b64 }
+
+function abrirEmailCap() {
+  _emailCapData = []; _emailExpanded = {};
+  document.getElementById('email-cap-lista').innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);">Clique em "Escanear" para buscar e-mails com documentos fiscais.</div>';
+  setText('email-cap-info', 'Caixa: ' + (window._graphUserEmail || 'maroni.tech@transmaroni.com.br'));
+  document.getElementById('modal-email-cap').style.display = '';
+}
+function fecharEmailCap() { document.getElementById('modal-email-cap').style.display = 'none'; }
+
+async function escanearEmails() {
+  if (!IS_SERVER) { showToast('Esta função requer o servidor Flask ativo.'); return; }
+  const btn = document.getElementById('btn-escanear');
+  if (btn) { btn.textContent = '⏳ Buscando...'; btn.disabled = true; }
+  try {
+    const r = await fetch('/api/graph/emails');
+    const data = await r.json();
+    if (btn) { btn.textContent = '🔍 Escanear E-mails'; btn.disabled = false; }
+    if (data.error) { showToast('Erro: ' + data.error); renderEmailCapLista([]); return; }
+    _emailCapData = data.emails || [];
+    renderEmailCapLista(_emailCapData);
+    setText('email-cap-info', _emailCapData.length + ' e-mail(s) encontrado(s) com documentos fiscais.');
+  } catch(e) {
+    if (btn) { btn.textContent = '🔍 Escanear E-mails'; btn.disabled = false; }
+    showToast('Erro de rede: ' + e.message);
+  }
+}
+
+function renderEmailCapLista(emails) {
+  const el = document.getElementById('email-cap-lista'); if (!el) return;
+  if (!emails.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);">Nenhum e-mail com documento fiscal encontrado.</div>'; return; }
+  el.innerHTML = emails.map((e, i) => {
+    const from    = e.from?.emailAddress?.address || '—';
+    const fromN   = e.from?.emailAddress?.name || from;
+    const date    = (e.receivedDateTime || '').substring(0, 10);
+    const subject = e.subject || '(sem assunto)';
+    const isExp   = !!_emailExpanded[e.id];
+    return '<div class="email-cap-item' + (isExp?' expanded':'') + '" id="ecap-' + i + '">' +
+      '<div style="display:flex;gap:10px;align-items:flex-start;" onclick="toggleEmailExp(\'' + e.id + '\',' + i + ')">' +
+        '<span style="font-size:18px;">' + (isExp?'📂':'📁') + '</span>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + subject + '</div>' +
+          '<div style="font-size:11px;color:var(--muted);">' + fromN + ' · ' + date + '</div>' +
+        '</div>' +
+        '<span style="font-size:12px;color:var(--accent);font-weight:600;">PDF 📎</span>' +
+      '</div>' +
+      '<div id="ecap-body-' + i + '" style="display:' + (isExp?'block':'none') + ';margin-top:10px;">' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;" id="ecap-atts-' + i + '">' +
+          '<span style="color:var(--muted);">Carregando anexos...</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function toggleEmailExp(msgId, idx) {
+  _emailExpanded[msgId] = !_emailExpanded[msgId];
+  const bodyEl = document.getElementById('ecap-body-' + idx);
+  const item   = document.getElementById('ecap-' + idx);
+  if (!bodyEl) return;
+  if (!_emailExpanded[msgId]) { bodyEl.style.display = 'none'; item.classList.remove('expanded'); return; }
+  bodyEl.style.display = ''; item.classList.add('expanded');
+  const attsEl = document.getElementById('ecap-atts-' + idx);
+  try {
+    const r = await fetch('/api/graph/email/' + msgId + '/attachments');
+    const data = await r.json();
+    if (data.error) { if(attsEl) attsEl.innerHTML = '<span style="color:var(--red-tx);">Erro: ' + data.error + '</span>'; return; }
+    const atts = data.attachments || [];
+    if (!atts.length) { if(attsEl) attsEl.innerHTML = '<span style="color:var(--muted);">Nenhum PDF encontrado neste e-mail.</span>'; return; }
+    if (attsEl) attsEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px;font-size:11px;">Anexos PDF:</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+      atts.map(a => '<span class="att-chip" onclick="iniciarImpAnexo(\'' + msgId + '\',\'' + a.id + '\',\'' + a.name.replace(/'/g,"\\'") + '\')">' +
+        '📄 ' + a.name + ' <span style="color:var(--muted);">(' + Math.round((a.size||0)/1024) + ' KB)</span>' +
+        ' <span style="color:var(--accent);font-weight:700;">+ Importar</span>' +
+      '</span>').join('') +
+      '</div>';
+  } catch(e) { if(attsEl) attsEl.innerHTML = '<span style="color:var(--red-tx);">Erro de rede.</span>'; }
+}
+
+async function iniciarImpAnexo(msgId, attId, nome) {
+  showToast('Carregando PDF...');
+  try {
+    const r = await fetch('/api/graph/attachment/' + msgId + '/' + attId);
+    const data = await r.json();
+    if (data.error) { showToast('Erro: ' + data.error); return; }
+    _impAnexoData = { msgId, attId, nome: data.nome || nome, b64: data.b64 };
+    // Populate operator dropdown
+    const sel = document.getElementById('imp-op');
+    sel.innerHTML = '<option value="">— Não encaminhar agora —</option>';
+    _penUsuarios.forEach(u => { const o = document.createElement('option'); o.value = u.login; o.textContent = u.nome; sel.appendChild(o); });
+    setText('imp-anexo-nome', '📄 ' + _impAnexoData.nome);
+    document.getElementById('imp-obs').value = '';
+    document.getElementById('imp-tipo').value = nome.toLowerCase().includes('boleto') ? 'boleto' : 'nf';
+    document.getElementById('modal-imp-anexo').style.display = '';
+  } catch(e) { showToast('Erro de rede: ' + e.message); }
+}
+
+function fecharImpAnexo() { document.getElementById('modal-imp-anexo').style.display = 'none'; }
+
+function confirmarImpAnexo() {
+  if (!_impAnexoData) return;
+  const tipo  = document.getElementById('imp-tipo')?.value || 'nf';
+  const opLgn = document.getElementById('imp-op')?.value || '';
+  const obs   = document.getElementById('imp-obs')?.value.trim() || '';
+  const doc   = { nome: _impAnexoData.nome, b64: _impAnexoData.b64 };
+
+  if (opLgn) {
+    // Create pendência automatically
+    const op = _penUsuarios.find(u => u.login === opLgn) || { nome: opLgn };
+    const pen = {
+      id: 'pen_' + Date.now(),
+      nfRef: { chave:'', nf:'', fornecedor:'(E-mail capturado)', valor:0, data:'', vencimento:'', situacao:'' },
+      operador: opLgn, operadorNome: op.nome,
+      status: tipo === 'boleto' ? 'Boleto Anexado' : 'Encaminhada',
+      dataEnc: new Date().toISOString(),
+      encPor: currentUser.login, encPorNome: currentUser.nome,
+      mensagem: obs || 'Capturado do e-mail: ' + _impAnexoData.nome,
+      docs: { nf: tipo==='nf'?doc:null, os: tipo==='os'?doc:null, boleto: tipo==='boleto'?doc:null, outro: tipo==='outro'?doc:null },
+      assinatura: null,
+      historico: [{ data: new Date().toISOString(), usuario: currentUser.nome, acao: 'Capturado do E-mail', texto: _impAnexoData.nome }]
+    };
+    carregarPen();
+    penDB.push(pen);
+    salvarPenLocal();
+    showToast('PDF encaminhado para ' + op.nome + '!');
+  } else {
+    // Just store in _encDocs for manual use or show as downloaded
+    const a = document.createElement('a');
+    a.href = 'data:application/pdf;base64,' + _impAnexoData.b64;
+    a.download = _impAnexoData.nome;
+    a.click();
+    showToast('PDF baixado: ' + _impAnexoData.nome);
+  }
+  fecharImpAnexo();
+}
+
+// Arquivei PDF fetch
+async function buscarArquiveiPDF(chave, tipo) {
+  if (!IS_SERVER) { showToast('Requer servidor Flask ativo.'); return; }
+  if (!chave) { showToast('Chave de acesso não disponível.'); return; }
+  showToast('Buscando ' + (tipo==='boleto'?'boleto':'NF') + ' no Arquivei...');
+  try {
+    const endpoint = tipo === 'boleto' ? '/api/arquivei/boleto/' : '/api/arquivei/pdf/';
+    const r = await fetch(endpoint + encodeURIComponent(chave));
+    const data = await r.json();
+    if (data.error) { showToast('Arquivei: ' + data.error); return; }
+    const bytes = atob(data.b64);
+    const buf   = new Uint8Array(bytes.length);
+    for (let i=0; i<bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([buf], {type:'application/pdf'}));
+    window.open(url, '_blank');
+  } catch(e) { showToast('Erro: ' + e.message); }
+}
 
 function carregarPen() {
   try { penDB = JSON.parse(localStorage.getItem(SK_PEN) || '[]'); } catch(e) { penDB = []; }

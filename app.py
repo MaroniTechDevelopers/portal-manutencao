@@ -3,6 +3,14 @@ Portal NF — Servidor Azure App Service (Flask)
 Arquivo usado apenas no deploy Azure; localmente use server.py
 """
 from flask import Flask, request, jsonify, send_file, Response, abort
+import base64
+
+try:
+    import requests as _req
+    _HAS_REQUESTS = True
+except ImportError:
+    _HAS_REQUESTS = False
+
 import os, json, threading, shutil, datetime, requests as req_lib
 
 app     = Flask(__name__)
@@ -10,6 +18,17 @@ BASE    = os.path.dirname(os.path.abspath(__file__))
 ALLOWED = {'base.json', 'users.json', 'mapeamento.json', 'cfg.json', 'os.json', 'pendencias.json'}
 
 WRITE_TOKEN = os.environ.get('PORTAL_TOKEN', 'transmaroni-portal-2025')
+
+# Microsoft Graph config
+GRAPH_TENANT_ID     = os.environ.get('GRAPH_TENANT_ID', '')
+GRAPH_CLIENT_ID     = os.environ.get('GRAPH_CLIENT_ID', '')
+GRAPH_CLIENT_SECRET = os.environ.get('GRAPH_CLIENT_SECRET', '')
+GRAPH_USER_EMAIL    = os.environ.get('GRAPH_USER_EMAIL', 'maroni.tech@transmaroni.com.br')
+
+# Arquivei config
+ARQUIVEI_ACCESS_ID  = os.environ.get('ARQUIVEI_ACCESS_ID', '')
+ARQUIVEI_ACCESS_KEY = os.environ.get('ARQUIVEI_ACCESS_KEY', '')
+
 _write_lock = threading.Lock()
 BACKUP_DIR  = os.path.join(BASE, 'backups')
 AUDIT_FILE  = os.path.join(BASE, 'audit.log')
@@ -151,6 +170,113 @@ def api_status():
         'versao':   '1.0.0',
     })
     return _cors(resp)
+
+
+# ── Microsoft Graph ──────────────────────────────────────
+def _graph_token():
+    if not _HAS_REQUESTS:
+        raise RuntimeError('requests not installed')
+    url = f'https://login.microsoftonline.com/{GRAPH_TENANT_ID}/oauth2/v2.0/token'
+    r = _req.post(url, data={
+        'grant_type':    'client_credentials',
+        'client_id':     GRAPH_CLIENT_ID,
+        'client_secret': GRAPH_CLIENT_SECRET,
+        'scope':         'https://graph.microsoft.com/.default'
+    }, timeout=15)
+    r.raise_for_status()
+    return r.json().get('access_token')
+
+@app.route('/api/graph/emails', methods=['GET'])
+def graph_emails():
+    if not GRAPH_TENANT_ID or not GRAPH_CLIENT_ID or not GRAPH_CLIENT_SECRET:
+        return jsonify({'error': 'Graph API não configurada. Defina GRAPH_TENANT_ID, GRAPH_CLIENT_ID e GRAPH_CLIENT_SECRET nas variáveis de ambiente do servidor.'}), 503
+    try:
+        token  = _graph_token()
+        hdrs   = {'Authorization': f'Bearer {token}'}
+        params = {
+            '$filter':  "hasAttachments eq true and isDraft eq false",
+            '$top':     '50',
+            '$orderby': 'receivedDateTime desc',
+            '$select':  'id,subject,from,receivedDateTime,hasAttachments,bodyPreview'
+        }
+        r = _req.get(f'https://graph.microsoft.com/v1.0/users/{GRAPH_USER_EMAIL}/messages',
+                     headers=hdrs, params=params, timeout=20)
+        r.raise_for_status()
+        emails = r.json().get('value', [])
+        kw = ['nota fiscal', 'nf-e', 'nfs-e', 'boleto', 'fatura', 'danfe', 'nfe', 'nota de serviço']
+        emails = [e for e in emails if any(k in e.get('subject','').lower() for k in kw)]
+        return jsonify({'emails': emails})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/graph/email/<msg_id>/attachments', methods=['GET'])
+def graph_attachments(msg_id):
+    try:
+        token = _graph_token()
+        hdrs  = {'Authorization': f'Bearer {token}'}
+        r = _req.get(
+            f'https://graph.microsoft.com/v1.0/users/{GRAPH_USER_EMAIL}/messages/{msg_id}/attachments',
+            headers=hdrs, params={'$select': 'id,name,contentType,size'}, timeout=20)
+        r.raise_for_status()
+        atts = [a for a in r.json().get('value', [])
+                if 'pdf' in a.get('contentType','').lower() or a.get('name','').lower().endswith('.pdf')]
+        return jsonify({'attachments': atts})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/graph/attachment/<msg_id>/<att_id>', methods=['GET'])
+def graph_attachment(msg_id, att_id):
+    try:
+        token = _graph_token()
+        hdrs  = {'Authorization': f'Bearer {token}'}
+        r = _req.get(
+            f'https://graph.microsoft.com/v1.0/users/{GRAPH_USER_EMAIL}/messages/{msg_id}/attachments/{att_id}',
+            headers=hdrs, timeout=30)
+        r.raise_for_status()
+        att = r.json()
+        return jsonify({
+            'nome':        att.get('name', 'arquivo.pdf'),
+            'contentType': att.get('contentType', 'application/pdf'),
+            'b64':         att.get('contentBytes', '')
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ── Arquivei ──────────────────────────────────────────────
+@app.route('/api/arquivei/pdf/<chave>', methods=['GET'])
+def arquivei_pdf(chave):
+    if not ARQUIVEI_ACCESS_ID or not ARQUIVEI_ACCESS_KEY:
+        return jsonify({'error': 'Arquivei não configurada. Defina ARQUIVEI_ACCESS_ID e ARQUIVEI_ACCESS_KEY nas variáveis de ambiente.'}), 503
+    if not _HAS_REQUESTS:
+        return jsonify({'error': 'Dependência "requests" não instalada no servidor.'}), 503
+    try:
+        r = _req.get('https://app.arquivei.com.br/api/v1/nfe/pdf',
+                     params={'access_id': ARQUIVEI_ACCESS_ID, 'chave': chave},
+                     auth=(ARQUIVEI_ACCESS_ID, ARQUIVEI_ACCESS_KEY),
+                     timeout=30)
+        if r.status_code == 200:
+            return jsonify({'b64': base64.b64encode(r.content).decode(), 'nome': f'NF_{chave[:10]}.pdf'})
+        return jsonify({'error': f'Arquivei status {r.status_code}: {r.text[:200]}'}), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/arquivei/boleto/<chave>', methods=['GET'])
+def arquivei_boleto(chave):
+    if not ARQUIVEI_ACCESS_ID or not ARQUIVEI_ACCESS_KEY:
+        return jsonify({'error': 'Arquivei não configurada.'}), 503
+    if not _HAS_REQUESTS:
+        return jsonify({'error': '"requests" não instalada.'}), 503
+    try:
+        # Arquivei boleto endpoint (via NF chave / duplicata)
+        r = _req.get('https://app.arquivei.com.br/api/v1/nfe/boleto',
+                     params={'access_id': ARQUIVEI_ACCESS_ID, 'chave': chave},
+                     auth=(ARQUIVEI_ACCESS_ID, ARQUIVEI_ACCESS_KEY),
+                     timeout=30)
+        if r.status_code == 200:
+            return jsonify({'b64': base64.b64encode(r.content).decode(), 'nome': f'Boleto_{chave[:10]}.pdf'})
+        return jsonify({'error': f'Arquivei status {r.status_code}: {r.text[:200]}'}), r.status_code
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
