@@ -268,6 +268,9 @@ tr:hover td{background:rgba(0,0,0,.025)}
 .topnav-sub{color:rgba(255,255,255,.38);font-size:10px;white-space:nowrap;}
 .topnav-nav{display:flex;align-items:center;gap:1px;flex:1;overflow-x:auto;padding:0 10px;scrollbar-width:none;min-width:0;}
 .topnav-nav::-webkit-scrollbar{display:none;}
+.topnav-scroll-btn{background:none;border:none;color:rgba(255,255,255,.4);font-size:20px;line-height:1;cursor:pointer;padding:0 3px;height:36px;display:flex;align-items:center;flex-shrink:0;transition:color .15s,opacity .15s;font-family:inherit;}
+.topnav-scroll-btn:hover{color:#fff;}
+.topnav-scroll-btn:disabled{opacity:.15;cursor:default;}
 .topnav-nav .nav-item{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:6px;color:rgba(255,255,255,.5);font-size:11.5px;font-weight:500;white-space:nowrap;cursor:pointer;transition:color .15s,background .15s;background:none;border:none;height:36px;font-family:inherit;}
 .topnav-nav .nav-item:hover{color:rgba(255,255,255,.92);background:rgba(255,255,255,.07);}
 .topnav-nav .nav-item.active{color:var(--accent);background:rgba(245,200,0,.1);}
@@ -435,7 +438,9 @@ tr:hover td{background:rgba(0,0,0,.025)}
       <div class="topnav-sub">Controle de NFs</div>
     </div>
   </div>
-  <nav class="topnav-nav" id="sidebar-nav"></nav>
+  <button class="topnav-scroll-btn" id="tnav-prev" onclick="tnavScroll(-1)">&#8249;</button>
+  <nav class="topnav-nav" id="sidebar-nav" onscroll="tnavCheckScroll()"></nav>
+  <button class="topnav-scroll-btn" id="tnav-next" onclick="tnavScroll(1)">&#8250;</button>
   <div class="topnav-right" id="sidebar-status" style="display:none;">
     <div class="topnav-avatar" id="topnav-avatar-iniciais">WS</div>
     <div>
@@ -2186,6 +2191,21 @@ function buildNav() {
   const tn = document.getElementById('topnav');                 if (tn) tn.style.display = 'flex';
   document.getElementById('sidebar-status').style.display = 'flex';
   document.getElementById('user-chip').style.display = 'none';
+  setTimeout(tnavCheckScroll, 50);
+}
+function tnavCheckScroll() {
+  const nav  = document.getElementById('sidebar-nav');
+  const prev = document.getElementById('tnav-prev');
+  const next = document.getElementById('tnav-next');
+  if (!nav || !prev || !next) return;
+  prev.disabled = nav.scrollLeft <= 2;
+  next.disabled = nav.scrollLeft >= nav.scrollWidth - nav.clientWidth - 2;
+}
+function tnavScroll(dir) {
+  const nav = document.getElementById('sidebar-nav');
+  if (!nav) return;
+  nav.scrollBy({ left: dir * 200, behavior: 'smooth' });
+  setTimeout(tnavCheckScroll, 320);
 }
 
 // ── Página Verificar NFs ───────────────────────────────────────
