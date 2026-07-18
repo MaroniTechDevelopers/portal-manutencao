@@ -1,0 +1,9 @@
+*.log
+*.pyc
+__pycache__/
+backups/
+.env
+*.tmp
+audit.log
+users.json
+LEIA_ME_TOKEN.txt
