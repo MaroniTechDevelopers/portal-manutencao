@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 /* === TOKENS (padrão Grupo Maroni — tema claro) === */
 :root {
@@ -395,6 +396,21 @@ tr:hover td{background:rgba(0,0,0,.025)}
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="fecharModalUsuario()">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarUsuario()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL PERSONALIZAR TELAS ===== -->
+<div id="modal-perfil" class="modal-overlay hidden">
+  <div class="modal" style="max-width:500px;">
+    <h3>Personalizar Telas</h3>
+    <p id="modal-perfil-desc" style="color:var(--muted);font-size:12px;margin-bottom:14px;"></p>
+    <div id="perfil-checks" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin-bottom:18px;max-height:320px;overflow-y:auto;padding-right:4px;"></div>
+    <div id="mu-perfil-error" style="display:none;color:#dc2626;font-size:12px;padding:7px 12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;margin-bottom:10px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="fecharModalPerfil()">Cancelar</button>
+      <button class="btn btn-secondary btn-sm" onclick="resetarPerfil()" style="font-size:11px;">↺ Padrão do nível</button>
+      <button class="btn btn-primary" onclick="salvarPerfil()">Salvar</button>
     </div>
   </div>
 </div>
@@ -1303,9 +1319,18 @@ tr:hover td{background:rgba(0,0,0,.025)}
       <button class="modal-close" onclick="fecharModalOS()">✕</button>
     </div>
     <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="grid-column:span 2;display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px dashed var(--border);">
+        <span style="font-size:20px;">📄</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:2px;">Importar PDF da OS</div>
+          <div id="os-pdf-nome" style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Campos serão preenchidos automaticamente</div>
+        </div>
+        <input type="file" id="os-pdf-inp" accept=".pdf" style="display:none;" onchange="lerPDFOS()">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('os-pdf-inp').click()">Selecionar PDF</button>
+      </div>
       <div class="auth-field" style="grid-column:span 2;">
         <label>Número da OS *</label>
-        <input type="text" id="os-f-numero" placeholder="Ex: OS-2025-001">
+        <input type="text" id="os-f-numero" placeholder="Ex: 291344">
       </div>
       <div class="auth-field" style="grid-column:span 2;">
         <label>Fornecedor / Empresa</label>
@@ -2096,8 +2121,9 @@ function renderUsuarios() {
       <td style="font-family:monospace;font-size:12px;">${u.login}</td>
       <td><span class="badge-${u.nivel}">${nivelLabel[u.nivel]||u.nivel}</span></td>
       <td>${u.setor === 'ALL' ? '<span style="color:var(--muted);">Todos os setores</span>' : u.setor}</td>
-      <td style="display:flex;gap:6px;justify-content:flex-end;">
+      <td style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-sm" onclick="abrirModalUsuario('${u.id}')">Editar</button>
+        <button class="btn btn-secondary btn-sm" onclick="abrirModalPerfil('${u.id}')" title="Personalizar telas visíveis" style="${u.pagesPermitidas ? 'background:#ede9fe;color:#5b21b6;border-color:#c4b5fd;' : ''}">🖥️ Telas${u.pagesPermitidas ? ' ✎' : ''}</button>
         ${!isSelf ? `<button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:none;" onclick="deletarUsuario('${u.id}')">Excluir</button>` : ''}
       </td>
     </tr>`;
@@ -2131,78 +2157,104 @@ async function salvarNovaSenha() {
   toast('Senha alterada com sucesso!', 'success');
 }
 
-// ── Build nav baseado no nível do usuário ─────────────────────
-function buildNav() {
-  const nivel = currentUser.nivel;
-  const nav   = document.getElementById('sidebar-nav');
-  nav.innerHTML = '';
-  const section = t => `<div class="nav-section">${t}</div>`;
-  const item = (page, icon, label) =>
-    `<div class="nav-item" onclick="showPage('${page}')" data-page="${page}"><span class="nav-icon">${icon}</span> ${label}</div>`;
+// ── Personalização de perfil (telas por usuário) ──────────────
+let _perfilUserId = null;
 
-  if (nivel === 'admin') {
-    nav.innerHTML = [
-      section('Análise'),
-      item('dashboard',    '📊', 'Dashboard'),
-      item('registros',    '🗂️', 'Base NF'),
-      item('automacoes',   '🤖', 'Aderência Automações'),
-      item('verificar',    '🔍', 'Verificar NFs'),
-      section('Controle'),
-      item('vencimentos',  '⏰', 'Vencimentos'),
-      item('operadores',   '👷', 'Operadores'),
-      item('ordemservico', '🔧', 'Ordens de Serviço'),
-      item('comunicacao',  '💬', 'Pendências'),
-      item('agentes',      '🤖', 'Agentes IA'),
-      section('Operação'),
-      item('importar',     '📥', 'Importar & Processar'),
-      item('ni-lote',      '🏷️', 'Classificar NIs'),
-      section('Configuração'),
-      item('mapeamento',   '🏢', 'Mapeamento de Setores'),
-      item('colunas',      '⚙️', 'Colunas dos Relatórios'),
-      item('auditoria',    '📋', 'Auditoria'),
-    ].join('');
-    document.getElementById('sidebar-status').style.display = 'flex';
+function abrirModalPerfil(userId) {
+  _perfilUserId = userId;
+  const usuarios = getUsuarios();
+  const u = usuarios.find(x => x.id === userId);
+  if (!u) return;
+  const desc = document.getElementById('modal-perfil-desc');
+  if (desc) desc.textContent = `Definindo telas visíveis para: ${u.nome} (${u.nivel})`;
+  const pagesAtivas = u.pagesPermitidas || NIVEL_PAGES[u.nivel] || [];
+  const container = document.getElementById('perfil-checks');
+  if (!container) return;
+  container.innerHTML = TODAS_TELAS.map(t => {
+    const checked = pagesAtivas.includes(t.page) ? 'checked' : '';
+    const dispNivel = (NIVEL_PAGES[u.nivel] || []).includes(t.page);
+    const cor = dispNivel ? '' : 'color:var(--muted);';
+    return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;${cor}">
+      <input type="checkbox" id="pcheck-${t.page}" value="${t.page}" ${checked} style="width:14px;height:14px;">
+      <span style="font-size:12px;">${t.icon} ${t.label}</span>
+    </label>`;
+  }).join('');
+  document.getElementById('mu-perfil-error').style.display = 'none';
+  document.getElementById('modal-perfil').classList.remove('hidden');
+}
 
-  } else if (nivel === 'fiscal') {
-    nav.innerHTML = [
-      section('Análise'),
-      item('dashboard',   '📊', 'Dashboard'),
-      item('registros',   '🗂️', 'Base NF'),
-      item('automacoes',  '🤖', 'Aderência Automações'),
-      item('verificar',   '🔍', 'Verificar NFs'),
-      section('Controle'),
-      item('vencimentos', '⏰', 'Vencimentos'),
-      item('ordemservico','🔧', 'Ordens de Serviço'),
-      item('comunicacao', '💬', 'Pendências'),
-      item('agentes',     '🤖', 'Agentes IA'),
-      section('Operação'),
-      item('importar',    '📥', 'Importar & Processar'),
-      section('Configuração'),
-      item('mapeamento',  '🏢', 'Mapeamento de Setores'),
-    ].join('');
+function fecharModalPerfil() {
+  document.getElementById('modal-perfil').classList.add('hidden');
+  _perfilUserId = null;
+}
 
-  } else if (nivel === 'gerencia') {
-    nav.innerHTML = [
-      section('Análise'),
-      item('dashboard',   '📊', 'Dashboard'),
-      item('registros',   '🗂️', 'Base NF'),
-      item('automacoes',  '🤖', 'Aderência Automações'),
-      section('Controle'),
-      item('vencimentos', '⏰', 'Vencimentos'),
-    ].join('');
+function resetarPerfil() {
+  const usuarios = getUsuarios();
+  const u = usuarios.find(x => x.id === _perfilUserId);
+  if (!u) return;
+  const padrao = NIVEL_PAGES[u.nivel] || [];
+  TODAS_TELAS.forEach(t => {
+    const el = document.getElementById('pcheck-' + t.page);
+    if (el) el.checked = padrao.includes(t.page);
+  });
+}
 
-  } else {
-    const autoDoSetor = AUTOMACOES_CFG.find(a => a.setor === currentUser.setor);
-    nav.innerHTML = [
-      section('Minhas Notas'),
-      item('registros',   '🗂️', 'Minhas NFs'),
-      item('verificar',   '🔍', 'Verificar NFs'),
-      item('vencimentos', '⏰', 'Vencimentos'),
-      ...(autoDoSetor ? [item('automacoes', '🤖', 'Automação — ' + autoDoSetor.nome)] : []),
-    ].join('');
+function salvarPerfil() {
+  if (!_perfilUserId) return;
+  const selecionadas = TODAS_TELAS.map(t => t.page).filter(p => {
+    const el = document.getElementById('pcheck-' + p);
+    return el && el.checked;
+  });
+  const errEl = document.getElementById('mu-perfil-error');
+  if (selecionadas.length === 0) {
+    errEl.textContent = 'Selecione ao menos uma tela.';
+    errEl.style.display = 'block';
+    return;
   }
+  const usuarios = getUsuarios();
+  const idx = usuarios.findIndex(x => x.id === _perfilUserId);
+  if (idx === -1) return;
+  const padrao = NIVEL_PAGES[usuarios[idx].nivel] || [];
+  const personalizado = JSON.stringify(selecionadas.sort()) !== JSON.stringify([...padrao].sort());
+  usuarios[idx].pagesPermitidas = personalizado ? selecionadas : null;
+  saveUsuarios(usuarios);
+  if (_perfilUserId === currentUser.id) {
+    currentUser.pagesPermitidas = usuarios[idx].pagesPermitidas;
+    buildNav();
+  }
+  fecharModalPerfil();
+  renderUsuarios();
+  toast('Perfil atualizado com sucesso!', 'success');
+}
 
-  // Topnav user info
+// ── Build nav baseado no nível do usuário ─────────────────────
+const TODAS_TELAS = [
+  { page:'dashboard',    icon:'📊', label:'Dashboard',           secao:'Análise' },
+  { page:'registros',    icon:'🗂️', label:'Base NF',             secao:'Análise' },
+  { page:'automacoes',   icon:'🤖', label:'Automações',           secao:'Análise' },
+  { page:'verificar',    icon:'🔍', label:'Verificar NFs',        secao:'Análise' },
+  { page:'vencimentos',  icon:'⏰', label:'Vencimentos',          secao:'Controle' },
+  { page:'operadores',   icon:'👷', label:'Operadores',           secao:'Controle' },
+  { page:'ordemservico', icon:'🔧', label:'Ordens de Serviço',    secao:'Controle' },
+  { page:'comunicacao',  icon:'💬', label:'Pendências',           secao:'Controle' },
+  { page:'agentes',      icon:'🤖', label:'Agentes IA',           secao:'Controle' },
+  { page:'importar',     icon:'📥', label:'Importar & Processar', secao:'Operação' },
+  { page:'ni-lote',      icon:'🏷️', label:'Classificar NIs',     secao:'Operação' },
+  { page:'mapeamento',   icon:'🏢', label:'Mapeamento de Setores',secao:'Config.' },
+  { page:'colunas',      icon:'⚙️', label:'Colunas',             secao:'Config.' },
+  { page:'auditoria',    icon:'📋', label:'Auditoria',            secao:'Config.' },
+  { page:'usuarios',     icon:'👤', label:'Usuários',             secao:'Config.' },
+];
+
+function buildNav() {
+  const nav = document.getElementById('sidebar-nav');
+  nav.innerHTML = '';
+
+  const visíveis = TODAS_TELAS.filter(t => canAccessPage(t.page));
+  nav.innerHTML = visíveis.map(t =>
+    `<div class="nav-item" onclick="showPage('${t.page}')" data-page="${t.page}"><span class="nav-icon">${t.icon}</span> ${t.label}</div>`
+  ).join('');
+
   const iniciais = currentUser.nome.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
   const rolesLabel = { admin:'Administrador', fiscal:'Fiscal', gerencia:'Gerência' };
   const av = document.getElementById('topnav-avatar-iniciais'); if (av) av.textContent = iniciais;
@@ -2834,6 +2886,65 @@ function carregarOS() {
 
 function salvarOSLocal() {
   localStorage.setItem(SK_OS, JSON.stringify(osDB));
+}
+
+async function lerPDFOS() {
+  const inp = document.getElementById('os-pdf-inp');
+  if (!inp || !inp.files[0]) return;
+  const file = inp.files[0];
+  const nomEl = document.getElementById('os-pdf-nome');
+  if (nomEl) nomEl.textContent = '⏳ Lendo PDF…';
+  try {
+    if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js não carregado');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const arrBuf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrBuf }).promise;
+    let texto = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const pg = await pdf.getPage(i);
+      const tc = await pg.getTextContent();
+      texto += tc.items.map(it => it.str).join(' ') + '\n';
+    }
+
+    // Número OS: "Ordem de Serviço nº: 001 00291344" ou barcode "*001-291344*"
+    let num = '';
+    const m1 = texto.match(/[Oo]rdem\s+de\s+[Ss]ervi[çc]o\s+n[º°o]?\.?\s*[:\-]?\s*\d+\s+0*(\d{4,8})/);
+    if (m1) num = m1[1];
+    if (!num) { const m2 = texto.match(/\*\d{1,3}-(\d{4,8})\*/); if (m2) num = m2[1]; }
+    if (num) { const el = document.getElementById('os-f-numero'); if (el && !el.value) el.value = num; }
+
+    // Fornecedor
+    const mF = texto.match(/Fornecedor\s*:\s*[\d\.\s]*([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú\s&]{5,}(?:LTDA|ME|SA|S\.A\.|EIRELI|EPP)?)/);
+    if (mF) { const el = document.getElementById('os-f-fornecedor'); if (el && !el.value) el.value = mF[1].trim().replace(/\s+/g,' '); }
+
+    // Data de abertura (Início)
+    const mD = texto.match(/[Ii]n[íi]cio\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/);
+    if (mD) { const el = document.getElementById('os-f-data'); if (el && !el.value) el.value = `${mD[3]}-${mD[2]}-${mD[1]}`; }
+
+    // Descrição (Serviços Solicitados)
+    const mDesc = texto.match(/Servi[çc]os\s+Solicitados\s*:\s*([^\n]{10,150})/);
+    if (mDesc) { const el = document.getElementById('os-f-descricao'); if (el && !el.value) el.value = mDesc[1].trim().substring(0, 120); }
+
+    // Valor total das Requisições
+    const mVal = texto.match(/Custo\s+total\s+das\s+Requisi[çc][õo]es\s*:\s*([\d\.]+,\d{2})/);
+    if (mVal) { const el = document.getElementById('os-f-valor'); if (el && !el.value) el.value = parseFloat(mVal[1].replace(/\./g,'').replace(',','.')) || ''; }
+
+    // Status
+    const mSit = texto.match(/Situa[çc][aã]o\s*:\s*(\w+)/);
+    if (mSit) {
+      const sit = mSit[1].toLowerCase();
+      const map = [['andamento','Em andamento'],['conclu','Concluída'],['cancelad','Cancelada'],['aberta','Aberta']];
+      const found = map.find(([k]) => sit.includes(k));
+      if (found) { const el = document.getElementById('os-f-status'); if (el) el.value = found[1]; }
+    }
+
+    if (nomEl) nomEl.textContent = '✅ ' + file.name;
+    toast('PDF lido — campos preenchidos automaticamente.', 'success');
+  } catch(e) {
+    console.error('lerPDFOS', e);
+    if (nomEl) nomEl.textContent = '⚠️ Erro ao ler PDF';
+    toast('Não foi possível extrair dados do PDF.', 'error');
+  }
 }
 
 function buildPageOS() {
@@ -4935,6 +5046,9 @@ const NIVEL_PAGES = { admin: PAGE_ADMIN, fiscal: PAGE_FISCAL, gerencia: PAGE_GER
 
 function canAccessPage(page) {
   if (!currentUser) return false;
+  if (currentUser.pagesPermitidas && Array.isArray(currentUser.pagesPermitidas)) {
+    return currentUser.pagesPermitidas.includes(page);
+  }
   return (NIVEL_PAGES[currentUser.nivel] || []).includes(page);
 }
 
