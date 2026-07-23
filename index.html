@@ -115,7 +115,7 @@ select option{background:var(--surface2);color:var(--text)}
 .badge-yellow{background:var(--yellow-bg);color:var(--yellow-tx);border:1px solid rgba(245,200,0,.2)}
 .badge-blue{background:var(--blue-bg);color:var(--blue-tx);border:1px solid rgba(59,130,246,.2)}
 .badge-grey{background:var(--grey-bg);color:var(--grey-tx);border:1px solid rgba(255,255,255,.07)}
-.upload-trio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px}
+.upload-trio{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:16px}
 .upload-zone{border:1px dashed rgba(0,0,0,.15);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface);box-shadow:var(--shadow)}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(245,200,0,.03);box-shadow:0 0 24px rgba(245,200,0,.06)}
 .upload-zone.loaded{border-color:rgba(52,211,153,.4);border-style:solid;background:rgba(16,185,129,.03)}
@@ -587,7 +587,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
   <div class="page-header">
     <div class="page-header-left">
       <h2>Importar & Processar</h2>
-      <p>Cole os 3 relatórios e clique em Processar — replica a lógica da sua macro VBA</p>
+      <p>Cole os relatórios e clique em Processar — Arquivei × R1 × R2 × SAP</p>
     </div>
   </div>
 
@@ -597,6 +597,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
       <div class="psitem"><div class="dot" id="ps-arq" style="width:10px;height:10px;border-radius:50%;background:#e5e7eb"></div> <span>Arquivei</span> <span id="ps-arq-n" style="color:var(--muted);font-size:11px;"></span></div>
       <div class="psitem"><div class="dot" id="ps-r1" style="width:10px;height:10px;border-radius:50%;background:#e5e7eb"></div> <span>R1</span> <span id="ps-r1-n" style="color:var(--muted);font-size:11px;"></span></div>
       <div class="psitem"><div class="dot" id="ps-r2" style="width:10px;height:10px;border-radius:50%;background:#e5e7eb"></div> <span>R2</span> <span id="ps-r2-n" style="color:var(--muted);font-size:11px;"></span></div>
+      <div class="psitem"><div class="dot" id="ps-sap" style="width:10px;height:10px;border-radius:50%;background:#e5e7eb"></div> <span>SAP</span> <span id="ps-sap-n" style="color:var(--muted);font-size:11px;">opcional</span></div>
     </div>
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
       <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;cursor:pointer;padding:8px 12px;background:var(--surface2);border:1.5px solid var(--border);border-radius:9px;" title="Acumular: novos registros são adicionados à base existente. Substituir: base é apagada e recriada.">
@@ -650,6 +651,19 @@ tr:hover td{background:rgba(0,0,0,.025)}
       </div>
       <input type="file" id="file-r2" accept=".xlsx,.xls" onchange="loadFile(event,'r2')">
     </div>
+
+    <!-- SAP -->
+    <div>
+      <div class="upload-zone" id="zone-sap" onclick="document.getElementById('file-sap').click()"
+           ondrop="handleDrop(event,'sap')" ondragover="handleDragOver(event,'sap')" ondragleave="handleDragLeave(event,'sap')">
+        <span class="upload-tag" style="background:#ede9fe;color:#5b21b6;">SAP — Opcional</span>
+        <span class="upload-icon">🗂️</span>
+        <h4>Relatório SAP</h4>
+        <p>Chave col. L (12) · Fornecedor col. M (13)<br>Valor col. O (15) · Num. NF col. I (9)</p>
+        <div class="upload-badge-info" id="info-sap" style="display:none;">✓ Carregado</div>
+      </div>
+      <input type="file" id="file-sap" accept=".xlsx,.xls" onchange="loadFile(event,'sap')">
+    </div>
   </div>
 
   <!-- LOG -->
@@ -701,6 +715,14 @@ tr:hover td{background:rgba(0,0,0,.025)}
       </select>
     </div>
     <div class="filter-group">
+      <label>Status SAP</label>
+      <select id="r-sap" onchange="filtrarBase()">
+        <option value="">Todos</option>
+        <option value="Contabilizado">✅ Contabilizado SAP</option>
+        <option value="Pendente SAP">⚠️ Pendente SAP</option>
+      </select>
+    </div>
+    <div class="filter-group">
       <label>Usuário</label>
       <select id="r-usuario" onchange="filtrarBase()"><option value="">Todos</option></select>
     </div>
@@ -728,6 +750,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
             <th>Setor</th>
             <th>Situação Fiscal</th>
             <th>Status Contábil</th>
+            <th>SAP</th>
             <th>Usuário</th>
           </tr>
         </thead>
@@ -1778,7 +1801,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
 // ============================================================
 // STATE
 // ============================================================
-let rawArq = null, rawR1 = null, rawR2 = null;
+let rawArq = null, rawR1 = null, rawR2 = null, rawSAP = null;
 let baseNF = [];        // resultado processado
 let filteredBase = [];  // filtrado para dashboard
 let currentFilter = []; // filtro ativo na Base NF (usado para exportar)
@@ -3761,7 +3784,8 @@ function readExcel(file, tipo) {
       if (tipo === 'arq') rawArq = raw;
       if (tipo === 'r1')  rawR1  = raw;
       if (tipo === 'r2')  rawR2  = raw;
-      const n = raw.length - (tipo==='arq'? cfg.arqStart : tipo==='r1'? cfg.r1Start : cfg.r2Start) + 1;
+      if (tipo === 'sap') rawSAP = raw;
+      const n = raw.length - (tipo==='arq'? cfg.arqStart : tipo==='r1'? cfg.r1Start : tipo==='r2'? cfg.r2Start : 1) + 1;
       document.getElementById('zone-'+tipo).classList.add('loaded');
       document.getElementById('info-'+tipo).textContent = `✓ ${file.name} (${Math.max(0,n)} linhas)`;
       document.getElementById('info-'+tipo).style.display = 'block';
@@ -3780,7 +3804,11 @@ function readExcel(file, tipo) {
 function checkProcessarBtn() {
   const ok = rawArq && rawR1 && rawR2;
   document.getElementById('btn-processar').disabled = !ok;
-  if (ok) addLog('✅ Todos os arquivos prontos. Clique em Processar.', 'var(--accent)');
+  const sapEl = document.getElementById('ps-sap');
+  if (sapEl) sapEl.style.background = rawSAP ? 'var(--green)' : '#e5e7eb';
+  const sapN = document.getElementById('ps-sap-n');
+  if (sapN) sapN.textContent = rawSAP ? `${rawSAP.length - 1} linhas` : 'opcional';
+  if (ok) addLog('✅ Arquivos prontos.' + (rawSAP ? ' SAP carregado.' : ' SAP não carregado (opcional).') + ' Clique em Processar.', 'var(--accent)');
 }
 
 function updateSidebarDots() {
@@ -3825,6 +3853,26 @@ function processarBase() {
     if (u && u !== '0' && !mapUsuario.has(chave)) mapUsuario.set(chave, u);
   }
   addLog(`  → R2: ${mapR2.size} chaves indexadas`, 'var(--muted)');
+
+  // ETAPA 2b: Indexar SAP (opcional)
+  const mapSAP    = new Map(); // chave44 → numSAP
+  const mapSAPFbk = new Map(); // "fornNorm|valor" → numSAP (fallback NFS-e sem chave)
+  if (rawSAP && rawSAP.length > 1) {
+    for (let i = 1; i < rawSAP.length; i++) {
+      const row = rawSAP[i];
+      const chave  = trim44(str(row[11]));  // col L
+      const numSAP = str(row[5]);           // col F (NUM_SAP)
+      const forn   = str(row[12]).toLowerCase().replace(/\s+/g,' ').trim(); // col M
+      const valor  = parseFloat(str(row[14]).replace(',','.')) || 0;         // col O
+      if (chave && chave.length === 44) {
+        mapSAP.set(chave, numSAP || '✓');
+      } else if (forn) {
+        const fbkKey = forn.substring(0,20) + '|' + valor.toFixed(2);
+        mapSAPFbk.set(fbkKey, numSAP || '✓');
+      }
+    }
+    addLog(`  → SAP: ${mapSAP.size} chaves + ${mapSAPFbk.size} fallback (fornecedor+valor)`, 'var(--muted)');
+  }
 
   // ETAPA 3: Processar Arquivei (deduplicar + cruzar)
   const vistos = new Set();
@@ -3894,6 +3942,22 @@ function processarBase() {
       }
     }
 
+    // Cruzamento SAP
+    let statusSAP = '';
+    let numSAP = '';
+    if (rawSAP) {
+      if (mapSAP.has(chave)) {
+        statusSAP = 'Contabilizado'; numSAP = mapSAP.get(chave);
+      } else {
+        const fbkKey = fornecedor.toLowerCase().replace(/\s+/g,' ').trim().substring(0,20) + '|' + valor.toFixed(2);
+        if (mapSAPFbk.has(fbkKey)) {
+          statusSAP = 'Contabilizado'; numSAP = mapSAPFbk.get(fbkKey);
+        } else {
+          statusSAP = 'Pendente SAP';
+        }
+      }
+    }
+
     newNFs.push({
       chave,
       ufOrig: str(row[idx(c.arqUfOrig)]),
@@ -3911,6 +3975,8 @@ function processarBase() {
       situacao,
       statusC,
       usuario: mapUsuario.get(chave) || '',
+      statusSAP,
+      numSAP,
     });
   }
 
@@ -3925,6 +3991,7 @@ function processarBase() {
       if (existMap.has(nf.chave)) {
         const ex = existMap.get(nf.chave);
         ex.situacao = nf.situacao; ex.statusC = nf.statusC; ex.usuario = nf.usuario;
+        if (nf.statusSAP) { ex.statusSAP = nf.statusSAP; ex.numSAP = nf.numSAP; }
         atualizadas++;
       } else {
         existMap.set(nf.chave, nf);
@@ -4110,7 +4177,11 @@ async function clearBaseIDB() {
 
 function limparTudo() {
   if (!confirm('Limpar todos os dados processados e arquivos carregados?')) return;
-  rawArq = rawR1 = rawR2 = null;
+  rawArq = rawR1 = rawR2 = rawSAP = null;
+  const zs=document.getElementById('zone-sap'); if(zs) zs.classList.remove('loaded');
+  const is=document.getElementById('info-sap'); if(is){is.textContent='✓ Carregado';is.style.display='none';}
+  const ps=document.getElementById('ps-sap'); if(ps) ps.style.background='#e5e7eb';
+  const pn=document.getElementById('ps-sap-n'); if(pn) pn.textContent='opcional';
   baseNF = []; filteredBase = [];
   clearBaseIDB();
   localStorage.removeItem(SK_BASE);
@@ -4541,6 +4612,7 @@ function renderBase() {
   const search   = (document.getElementById('r-search')?.value||'').toLowerCase();
   const situacao = document.getElementById('r-situacao')?.value||'';
   const statusC  = document.getElementById('r-statusc')?.value||'';
+  const filtSAP  = document.getElementById('r-sap')?.value||'';
   const usuario  = document.getElementById('r-usuario')?.value||'';
   const produto  = document.getElementById('r-produto')?.value||'';
 
@@ -4560,6 +4632,7 @@ function renderBase() {
     if (setorFiltro && r.setor !== setorFiltro)   return false;
     if (situacao    && r.situacao !== situacao)    return false;
     if (statusC     && r.statusC  !== statusC)     return false;
+    if (filtSAP     && r.statusSAP !== filtSAP)    return false;
     if (usuario     && r.usuario  !== usuario)     return false;
     if (produto     && r.produto  !== produto)     return false;
     if (search && ![r.chave,r.fornecedor,r.numero,r.setor,r.usuario,r.item].some(v=>v&&v.toLowerCase().includes(search))) return false;
@@ -4572,7 +4645,7 @@ function renderBase() {
   if (btnExp) btnExp.textContent = `⬇ Exportar Excel (${filtered.length.toLocaleString('pt-BR')})`;
   const tbody = document.getElementById('base-tbody');
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted);">${baseNF.length ? 'Nenhum registro com esse filtro' : 'Processe os relatórios na aba Importar & Processar'}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;padding:40px;color:var(--muted);">${baseNF.length ? 'Nenhum registro com esse filtro' : 'Processe os relatórios na aba Importar & Processar'}</td></tr>`;
     renderPaginacao(0);
     return;
   }
@@ -4608,6 +4681,7 @@ function renderBase() {
       </td>
       <td>${sitBadge(r.situacao)}</td>
       <td>${sitBadge(r.statusC)}</td>
+      <td style="white-space:nowrap;">${r.statusSAP === 'Contabilizado' ? '<span class="badge badge-green">✅ SAP</span>' : r.statusSAP === 'Pendente SAP' ? '<span class="badge badge-red">⚠️ Pend.</span>' : '<span style="color:var(--muted);font-size:11px;">—</span>'}</td>
       <td style="font-size:11px;">${r.usuario||'—'}</td>
     </tr>
   `).join('');
@@ -4624,18 +4698,18 @@ function exportarExcel() {
   const wb = XLSX.utils.book_new();
 
   // ── ABA 1: Base NF ──────────────────────────────────────────
-  const header = ['Chave NF','Fornecedor','Data','Número NF','Valor (R$)','Status Arquivei','Produto/Item','Setor','Status Contábil','Usuário Rodopar','Situação Fiscal'];
+  const header = ['Chave NF','Fornecedor','Data','Número NF','Valor (R$)','Status Arquivei','Produto/Item','Setor','Situação Fiscal','Status Contábil','Status SAP','Num. SAP','Usuário'];
   const rows = dados.map(r => [
     r.chave||'', r.fornecedor||'', r.data||'', r.numero||'',
     r.valor||0, r.statusArq||'', r.item||'', r.setor||'',
-    r.statusC||'', r.usuario||'', r.situacao||''
+    r.situacao||'', r.statusC||'', r.statusSAP||'', r.numSAP||'', r.usuario||''
   ]);
   const wsData = [header, ...rows];
   const ws1 = XLSX.utils.aoa_to_sheet(wsData);
 
   ws1['!cols'] = [
     {wch:48},{wch:30},{wch:12},{wch:10},{wch:14},
-    {wch:18},{wch:30},{wch:20},{wch:16},{wch:22},{wch:16}
+    {wch:18},{wch:30},{wch:20},{wch:16},{wch:16},{wch:14},{wch:12},{wch:22}
   ];
   ws1['!freeze'] = { xSplit: 0, ySplit: 1 };
   ws1['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:header.length-1} }) };
