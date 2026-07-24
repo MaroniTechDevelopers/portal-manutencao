@@ -3457,13 +3457,147 @@ function _renderLoteCard(r) {
     detalhe = 'Tipo de documento não reconhecido.';
   }
   const icone = r.erro ? '❌' : (r.tipo === 'outro' ? '⚠️' : '✅');
+  // Badges de cruzamento
+  let matchHtml = '';
+  if (!r.erro) {
+    if (r._matchOS) {
+      const mc = r._matchOS.confianca === 'alta' ? '#10b981' : r._matchOS.confianca === 'media' ? '#f59e0b' : '#6b7280';
+      matchHtml += `<div style="margin-top:4px;display:flex;align-items:center;gap:4px;font-size:10px;">
+        <span>🔗</span><span style="color:${mc};font-weight:600;">OS&nbsp;${r._matchOS.numero||'?'} vinculada (${r._matchOS.fonte||''})</span>
+        <span style="margin-left:auto;padding:1px 5px;border-radius:8px;font-size:9px;background:${mc}22;color:${mc};font-weight:700;">${r._matchOS.confianca}</span></div>`;
+    }
+    if (r._matchBoleto) {
+      const mc = r._matchBoleto.confianca === 'alta' ? '#10b981' : '#f59e0b';
+      matchHtml += `<div style="margin-top:3px;display:flex;align-items:center;gap:4px;font-size:10px;">
+        <span>🧾</span><span style="color:${mc};font-weight:600;">Boleto correspondente identificado</span>
+        <span style="margin-left:auto;padding:1px 5px;border-radius:8px;font-size:9px;background:${mc}22;color:${mc};font-weight:700;">${r._matchBoleto.confianca}</span></div>`;
+    }
+    if (r._matchNF) {
+      matchHtml += `<div style="margin-top:3px;font-size:10px;color:#10b981;font-weight:600;">📄 NF no lote: ${r._matchNF.ref}</div>`;
+    }
+    if (r._matchNFExistente) {
+      matchHtml += `<div style="margin-top:3px;font-size:10px;color:#3b82f6;font-weight:600;">📄 NF existente: ${r._matchNFExistente.numero||r._matchNFExistente.fornecedor||'?'}</div>`;
+    }
+  }
   return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;background:var(--bg);border-left:3px solid ${cor};margin-bottom:6px;">
     <span style="font-size:18px;line-height:1.3;">${icone}</span>
     <div style="flex:1;min-width:0;">
       <div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.5px;">${tipoLabel[r.tipo]||r.tipo}</div>
       <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0;">${r.arquivo}</div>
       <div style="font-size:11px;color:var(--muted);">${detalhe}</div>
+      ${matchHtml}
     </div>
+  </div>`;
+}
+
+function _cruzarLote() {
+  function _kw(s) {
+    if (!s) return [];
+    return s.toUpperCase().replace(/[^A-Z0-9\s]/g, ' ')
+      .split(/\s+/).filter(w => w.length > 2 &&
+        !/^(DE|DA|DO|DAS|DOS|E|OU|A|O|AS|OS|EM|COM|PARA|POR|LTDA|ME|EIRELI|EPP|SA|SLU|CNPJ|CPF|RG)$/.test(w));
+  }
+  function _overlap(a, b) {
+    const ka = new Set(_kw(a)), kb = _kw(b);
+    if (!ka.size || !kb.length) return 0;
+    return kb.filter(w => ka.has(w)).length / Math.max(ka.size, kb.length);
+  }
+  function _valProx(v1, v2, tol) {
+    if (!v1 || !v2) return false;
+    return Math.abs(v1 - v2) / Math.max(Math.abs(v1), Math.abs(v2)) <= tol;
+  }
+
+  const nfs     = _loteResultados.filter(r => (r.tipo==='nfe'||r.tipo==='nfse') && !r.erro && r._linhas);
+  const oss     = _loteResultados.filter(r => r.tipo==='os'     && !r.erro && r.dados.numero);
+  const boletos = _loteResultados.filter(r => r.tipo==='boleto' && !r.erro);
+
+  for (const nf of nfs) {
+    const txt = (nf._linhas||[]).map(l => l.str).join('\n').toUpperCase();
+
+    // 1. Número de OS explícito no texto da NF
+    let matchOS = null;
+    const osRx = /(?:OS|O\.S\.|ORDEM\s*DE\s*SERVI)[^\d]{0,15}(\d{3,})/g;
+    let m;
+    while ((m = osRx.exec(txt)) !== null && !matchOS) {
+      const num = m[1];
+      const loteOS = oss.find(o => String(o.dados.numero).replace(/\D/g,'') === num.replace(/\D/g,''));
+      if (loteOS) { matchOS = { ref: loteOS.arquivo, numero: loteOS.dados.numero, confianca: 'alta', fonte: 'lote' }; break; }
+      const dbOS = (osDB||[]).find(o => String(o.numero).replace(/\D/g,'') === num.replace(/\D/g,''));
+      if (dbOS)   { matchOS = { ref: dbOS.numero, numero: dbOS.numero, confianca: 'alta', fonte: 'base' }; break; }
+    }
+
+    // 2. Fallback: emitente + valor vs OS do lote
+    if (!matchOS && nf.dados.valor) {
+      let best = null, bestS = 0;
+      for (const os of oss) {
+        const ov = _overlap(nf.dados.emitente, os.dados.fornecedor);
+        if (ov >= 0.4 && _valProx(nf.dados.valor, os.dados.valor, 0.08) && ov > bestS) { bestS = ov; best = os; }
+      }
+      if (best) matchOS = { ref: best.arquivo, numero: best.dados.numero, confianca: 'media', fonte: 'lote' };
+    }
+
+    // 3. Fallback: emitente + valor vs osDB
+    if (!matchOS && nf.dados.valor) {
+      let best = null, bestS = 0;
+      for (const os of (osDB||[])) {
+        const ov = _overlap(nf.dados.emitente, os.fornecedor);
+        if (ov >= 0.4 && _valProx(nf.dados.valor, os.valor, 0.08) && ov > bestS) { bestS = ov; best = os; }
+      }
+      if (best) matchOS = { ref: best.numero, numero: best.numero, confianca: 'baixa', fonte: 'base' };
+    }
+
+    if (matchOS) nf._matchOS = matchOS;
+
+    // Boleto: beneficiário + valor
+    let bestBol = null, bestBolS = 0;
+    for (const bol of boletos) {
+      const ov = _overlap(nf.dados.emitente, bol.dados.beneficiario);
+      if (ov >= 0.3 && _valProx(nf.dados.valor, bol.dados.valor, 0.12) && ov > bestBolS) { bestBolS = ov; bestBol = bol; }
+    }
+    if (bestBol) nf._matchBoleto = { ref: bestBol.arquivo, confianca: bestBolS >= 0.5 ? 'alta' : 'media' };
+  }
+
+  // Para cada OS do lote: encontrar NF vinculada
+  for (const os of oss) {
+    const nfLote = nfs.find(nf => nf._matchOS && nf._matchOS.ref === os.arquivo);
+    if (nfLote) { os._matchNF = { ref: nfLote.arquivo, confianca: nfLote._matchOS.confianca }; continue; }
+    try {
+      const base = JSON.parse(localStorage.getItem('pnf_base') || '[]');
+      const nfBase = base.find(nf => nf.os && String(nf.os).replace(/\D/g,'') === String(os.dados.numero).replace(/\D/g,''));
+      if (nfBase) os._matchNFExistente = { numero: nfBase.numero || nfBase.chave, fornecedor: nfBase.emitente };
+    } catch(e) {}
+  }
+}
+
+function _renderCruzamentosLote() {
+  const resEl = document.getElementById('lote-resultados');
+  if (!resEl) return;
+  const linhas = [];
+  const corConf = { alta:'#10b981', media:'#f59e0b', baixa:'#6b7280' };
+  for (const r of _loteResultados) {
+    if (r._matchOS && (r.tipo==='nfe'||r.tipo==='nfse')) {
+      const cor = corConf[r._matchOS.confianca]||'#6b7280';
+      linhas.push(`<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;background:var(--bg);margin-bottom:4px;font-size:11px;">
+        <span style="color:#10b981;">📄</span>
+        <span style="font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.arquivo}</span>
+        <span style="color:var(--muted);">→ 🔧 OS&nbsp;${r._matchOS.numero}</span>
+        <span style="padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;background:${cor}22;color:${cor};">${r._matchOS.confianca}</span>
+      </div>`);
+    }
+    if (r._matchBoleto && (r.tipo==='nfe'||r.tipo==='nfse')) {
+      const cor = corConf[r._matchBoleto.confianca]||'#6b7280';
+      linhas.push(`<div style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:6px;background:var(--bg);margin-bottom:4px;font-size:11px;">
+        <span style="color:#f59e0b;">📄</span>
+        <span style="font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.arquivo}</span>
+        <span style="color:var(--muted);">→ 🧾 ${r._matchBoleto.ref}</span>
+        <span style="padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;background:${cor}22;color:${cor};">${r._matchBoleto.confianca}</span>
+      </div>`);
+    }
+  }
+  if (!linhas.length) return;
+  resEl.innerHTML += `<div style="margin-top:14px;padding:10px 12px;border-radius:8px;border:1px dashed var(--border);background:var(--bg2);">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:8px;">🔗 Cruzamentos identificados automaticamente</div>
+    ${linhas.join('')}
   </div>`;
 }
 
@@ -3489,6 +3623,7 @@ async function processarLotePDFs(files) {
     const resultado = { arquivo: file.name, tipo: 'outro', dados: {}, erro: null };
     try {
       const linhas = await _extrairLinhasPDF(file, 3);
+      resultado._linhas = linhas; // guardado para cruzamento
       resultado.tipo  = _identificarTipoPDF(linhas);
       if      (resultado.tipo === 'os')     resultado.dados = _extrairDadosOS(linhas);
       else if (resultado.tipo === 'nfe')    resultado.dados = _extrairDadosNF(linhas);
@@ -3502,6 +3637,13 @@ async function processarLotePDFs(files) {
   }
   if (progBar) progBar.style.width = '100%';
   if (progTxt) progTxt.textContent = `Concluído — ${arr.length} arquivo(s) processado(s)`;
+  // Cruzamento automático entre documentos do lote + base existente
+  carregarOS();
+  _cruzarLote();
+  if (resEl) {
+    resEl.innerHTML = _loteResultados.map(r => _renderLoteCard(r)).join('');
+    _renderCruzamentosLote();
+  }
   const temOS    = _loteResultados.some(r => r.tipo === 'os' && !r.erro && r.dados.numero);
   const temDados = _loteResultados.some(r => !r.erro && r.tipo !== 'outro');
   if (btnImp && temOS)    btnImp.style.display = '';
@@ -3528,6 +3670,25 @@ function salvarLote() {
   if (osNovos) partes.push(`${osNovos} OS salva${osNovos>1?'s':''}`);
   if (nfs)     partes.push(`${nfs} NF${nfs>1?'s':''} identificada${nfs>1?'s':''}`);
   if (bols)    partes.push(`${bols} boleto${bols>1?'s':''} identificado${bols>1?'s':''}`);
+  // Aplicar vínculos NF↔OS identificados pelo cruzamento
+  try {
+    const base = JSON.parse(localStorage.getItem('pnf_base') || '[]');
+    let vinculosNovos = 0;
+    for (const r of _loteResultados) {
+      if ((r.tipo!=='nfe' && r.tipo!=='nfse') || r.erro || !r._matchOS) continue;
+      const osNum = r._matchOS.numero;
+      const d = r.dados;
+      const idx = base.findIndex(nf =>
+        (d.chave && nf.chave && nf.chave === d.chave) ||
+        (d.numero && nf.numero && String(nf.numero) === String(d.numero))
+      );
+      if (idx >= 0 && !base[idx].os) { base[idx].os = osNum; vinculosNovos++; }
+    }
+    if (vinculosNovos > 0) {
+      localStorage.setItem('pnf_base', JSON.stringify(base));
+      partes.push(`${vinculosNovos} vínculo${vinculosNovos>1?'s':''} NF↔OS`);
+    }
+  } catch(e) {}
   if (partes.length) {
     toast(partes.join(', ') + ' ✅', 'success');
     fecharModalLote();
