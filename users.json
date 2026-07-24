@@ -1,0 +1,18 @@
+[
+  {
+    "id": "u_1782739557311",
+    "nome": "Willian Similamori Gremaschi",
+    "login": "wsimilamori",
+    "senhaHash": "b6c0b3b1eab7475cd5bb3bcc1baca0933614057675a3602efefcf29168c52105",
+    "setor": "ALL",
+    "nivel": "admin"
+  },
+  {
+    "id": "u_1784924882439",
+    "nome": "Amanda Soares",
+    "login": "asoares",
+    "senhaHash": "6007cc37794f5954e4b07a1316c2c9998d5e38564aef0b45a4d21a87c4577233",
+    "setor": "ALL",
+    "nivel": "admin"
+  }
+]
