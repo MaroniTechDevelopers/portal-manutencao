@@ -2035,6 +2035,21 @@ tr:hover td{background:rgba(0,0,0,.025)}
       </table>
     </div>
   </div>
+
+  <!-- Zona de reset de dados -->
+  <div class="card" style="border:1px solid #fca5a5;margin-top:16px;">
+    <div class="card-title" style="color:#dc2626;">⚠️ Zona de Administração — Limpar Dados</div>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 16px;">
+      Remove permanentemente os dados de teste do navegador. Usuários cadastrados e configurações de colunas são mantidos.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;" onclick="limparDadosTeste('nf')">🗑 Limpar Notas Fiscais</button>
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;" onclick="limparDadosTeste('os')">🗑 Limpar OS</button>
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;" onclick="limparDadosTeste('prot')">🗑 Limpar Protocolos</button>
+      <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;" onclick="limparDadosTeste('pen')">🗑 Limpar Pendências</button>
+      <button class="btn btn-sm" style="background:#dc2626;color:#fff;border:1px solid #dc2626;font-weight:700;" onclick="limparDadosTeste('tudo')">🗑 LIMPAR TUDO</button>
+    </div>
+  </div>
 </div>
 
 <!-- ===== CLASSIFICAR NIs (admin only) ===== -->
@@ -6633,6 +6648,32 @@ function setSyncStatus(status) {
 // ============================================================
 // AUDITORIA PAGE (Improvement 2C)
 // ============================================================
+
+function limparDadosTeste(tipo) {
+  const mapa = {
+    nf:   { key: 'pnf_base',                         label: 'todas as Notas Fiscais' },
+    os:   { key: 'portal_os_manutencao',              label: 'todas as Ordens de Serviço' },
+    prot: { key: 'portal_protocolos',                 label: 'todos os Protocolos' },
+    pen:  { key: 'portal_pendencias_manutencao',      label: 'todas as Pendências' },
+  };
+  if (tipo === 'tudo') {
+    if (!confirm('⚠️ LIMPAR TUDO\n\nIsso vai apagar permanentemente:\n• Notas Fiscais\n• Ordens de Serviço\n• Protocolos\n• Pendências\n\nUsuários e configurações são mantidos.\n\nConfirmar?')) return;
+    ['pnf_base','portal_os_manutencao','portal_protocolos','portal_pendencias_manutencao'].forEach(k => localStorage.removeItem(k));
+    baseNF = []; filteredBase = []; osDB = []; protocolDB = []; penDB = [];
+    toast('Todos os dados de teste foram removidos. ✅', 'success');
+    showPage('dashboard'); buildDashboard();
+    return;
+  }
+  const m = mapa[tipo]; if (!m) return;
+  if (!confirm(`Apagar ${m.label}?\n\nEsta ação não pode ser desfeita.`)) return;
+  localStorage.removeItem(m.key);
+  if (tipo === 'nf')   { baseNF = []; filteredBase = []; }
+  if (tipo === 'os')   { osDB = []; }
+  if (tipo === 'prot') { protocolDB = []; }
+  if (tipo === 'pen')  { penDB = []; }
+  toast(`${m.label.charAt(0).toUpperCase() + m.label.slice(1)} removidas. ✅`, 'success');
+}
+
 async function buildPageAuditoria() {
   const el   = document.getElementById('audit-loading');
   const wrap = document.getElementById('audit-table-wrap');
