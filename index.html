@@ -1054,11 +1054,11 @@ tr:hover td{background:rgba(0,0,0,.025)}
   <div class="page-header">
     <div class="page-header-left">
       <div id="pen-bread" style="display:none;margin-bottom:6px;">
-        <button class="btn btn-secondary btn-sm" onclick="voltarGridOps()">← Todos os operadores</button>
+        <button class="btn btn-secondary btn-sm" onclick="voltarGridOps()">← Todos os consultores</button>
         <span id="pen-bread-nome" style="margin-left:8px;font-weight:600;"></span>
       </div>
       <h2 id="pen-titulo">Central de Pendências</h2>
-      <p id="pen-sub">Encaminhe NFs para operadores e acompanhe entrega de documentos e boletos</p>
+      <p id="pen-sub">Encaminhe NFs para consultores e acompanhe entrega de documentos e boletos</p>
     </div>
     <div style="display:flex;gap:8px;" id="pen-header-btn">
       <button class="btn btn-primary btn-sm" onclick="abrirModalEnc()">+ Encaminhar NF</button>
@@ -1089,7 +1089,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
 <!-- MODAL: Encaminhar NF -->
 <div id="modal-enc" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalEnc()">
   <div class="modal" style="max-width:560px;width:96%;">
-    <div class="modal-header"><div class="modal-title">Encaminhar NF para Operador</div><button class="modal-close" onclick="fecharModalEnc()">✕</button></div>
+    <div class="modal-header"><div class="modal-title">Encaminhar NF para Consultor</div><button class="modal-close" onclick="fecharModalEnc()">✕</button></div>
     <div class="modal-body" style="display:grid;gap:12px;">
       <div class="auth-field">
         <label>Buscar e selecionar NF</label>
@@ -1098,12 +1098,12 @@ tr:hover td{background:rgba(0,0,0,.025)}
       <div id="enc-nf-lista" style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;font-size:12px;"></div>
       <div id="enc-nf-sel" style="display:none;padding:8px 12px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:8px;font-size:12px;"></div>
       <div class="auth-field">
-        <label>Operador *</label>
-        <select id="enc-op-sel"><option value="">Selecione o operador...</option></select>
+        <label>Consultor *</label>
+        <select id="enc-op-sel"><option value="">Selecione o consultor...</option></select>
       </div>
       <div class="auth-field">
         <label>Mensagem / Pendência</label>
-        <textarea id="enc-msg" rows="3" placeholder="Descreva a pendência para o operador..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;font-size:13px;"></textarea>
+        <textarea id="enc-msg" rows="3" placeholder="Descreva a pendência para o consultor..." style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical;font-size:13px;"></textarea>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
         <div class="auth-field" style="margin:0;">
@@ -1211,6 +1211,12 @@ tr:hover td{background:rgba(0,0,0,.025)}
           oninput="_filtrarDocsProt()" style="width:100%;margin-bottom:10px;box-sizing:border-box;">
         <div id="prot-lista-nf" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
         <div id="prot-auto-vinculados"></div>
+        <div style="margin-top:10px;">
+          <label style="font-size:11px;font-weight:600;color:var(--text);">Consultor responsável *</label>
+          <select id="prot-consultor" class="input-base" style="width:100%;box-sizing:border-box;margin-top:4px;">
+            <option value="">Selecione o consultor...</option>
+          </select>
+        </div>
         <div id="prot-lista-os" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;"></div>
         <div id="prot-lista-bol" style="display:none;padding:14px;border:1px solid var(--border);border-radius:8px;">
           <div style="font-size:12px;font-weight:600;margin-bottom:10px;">Adicionar Boleto manualmente</div>
@@ -1739,7 +1745,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
           ✅ Registro de vencimentos por NF<br>
           ✅ Vinculação de OS por NF<br>
           ✅ Tags e marcadores por fornecedor<br>
-          ✅ Cadastro de operadores responsáveis<br>
+          ✅ Cadastro de consultores responsáveis<br>
           ✅ Badge de alertas visuais na sidebar
         </div>
       </div>
@@ -1896,7 +1902,7 @@ tr:hover td{background:rgba(0,0,0,.025)}
             <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Vencimento</th>
             <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Setor</th>
             <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">OS</th>
-            <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Operador</th>
+            <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Consultor</th>
             <th style="padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);">Tags</th>
             <th style="padding:10px 14px;width:60px;"></th>
           </tr>
@@ -1913,10 +1919,10 @@ tr:hover td{background:rgba(0,0,0,.025)}
 <div id="page-operadores" class="page">
   <div class="page-header">
     <div class="page-header-left">
-      <h2>Operadores</h2>
+      <h2>Consultores</h2>
       <p>Responsáveis por setor — cada NF deve ter um dono</p>
     </div>
-    <button class="btn btn-primary btn-sm" onclick="abrirModalOperador()">+ Novo Operador</button>
+    <button class="btn btn-primary btn-sm" onclick="abrirModalOperador()">+ Novo Consultor</button>
   </div>
   <div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
     <!-- Lista -->
@@ -1932,13 +1938,13 @@ tr:hover td{background:rgba(0,0,0,.025)}
           </tr>
         </thead>
         <tbody id="op-tbody">
-          <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted);">Nenhum operador cadastrado.</td></tr>
+          <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted);">Nenhum consultor cadastrado.</td></tr>
         </tbody>
       </table>
     </div>
     <!-- Form novo operador -->
     <div class="card" id="op-form-box" style="display:none;">
-      <div class="card-title" id="op-form-title">Novo Operador</div>
+      <div class="card-title" id="op-form-title">Novo Consultor</div>
       <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px;">
         <input type="hidden" id="op-id">
         <div>
@@ -2102,8 +2108,8 @@ tr:hover td{background:rgba(0,0,0,.025)}
       </div>
     </div>
     <div style="margin-bottom:16px;">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:5px;">Operador Responsável</div>
-      <input type="text" id="ms-operador" placeholder="Nome do operador responsável" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:12px;" list="ms-operador-list">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:5px;">Consultor Responsável</div>
+      <input type="text" id="ms-operador" placeholder="Nome do consultor responsável" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:9px;background:var(--surface2);color:var(--text);font-size:12px;" list="ms-operador-list">
       <datalist id="ms-operador-list"></datalist>
     </div>
     <div style="margin-bottom:16px;">
@@ -2563,7 +2569,7 @@ const TODAS_TELAS = [
   { page:'automacoes',   icon:'🤖', label:'Automações',           secao:'Análise' },
   { page:'verificar',    icon:'🔍', label:'Verificar NFs',        secao:'Análise' },
   { page:'vencimentos',  icon:'⏰', label:'Vencimentos',          secao:'Controle' },
-  { page:'operadores',   icon:'👷', label:'Operadores',           secao:'Controle' },
+  { page:'operadores',   icon:'👷', label:'Consultores',           secao:'Controle' },
   { page:'ordemservico', icon:'🔧', label:'Ordens de Serviço',    secao:'Controle' },
   { page:'comunicacao',  icon:'💬', label:'Pendências',           secao:'Controle' },
   { page:'agentes',      icon:'🤖', label:'Agentes IA',           secao:'Controle' },
@@ -3035,7 +3041,7 @@ function lerDocEnc(tipo) {
 function confirmarEnc() {
   if (!_encNFSel) { showToast('Selecione uma NF.'); return; }
   const opLogin = document.getElementById('enc-op-sel')?.value;
-  if (!opLogin) { showToast('Selecione um operador.'); return; }
+  if (!opLogin) { showToast('Selecione um consultor.'); return; }
   const op = _penUsuarios.find(u => u.login === opLogin) || { nome: opLogin };
   const mensagem = document.getElementById('enc-msg')?.value.trim() || '';
   const pen = {
@@ -5407,7 +5413,7 @@ function calcMetrica(metrica, src) {
     case 'operador': {
       const c={}; ativas.forEach(r=>{ const o=r.operador||r.responsavel||r.emissor||'—'; c[o]=(c[o]||0)+1; });
       const e=Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,8);
-      return { labels:e.map(x=>x[0]), values:e.map(x=>x[1]), cols:['Operador','Qtd'], rows:e.map(x=>[x[0],x[1]]) };
+      return { labels:e.map(x=>x[0]), values:e.map(x=>x[1]), cols:['Consultor','Qtd'], rows:e.map(x=>[x[0],x[1]]) };
     }
     case 'tendencia': {
       const bm={}; ativas.forEach(r=>{ const k=r.data?r.data.substring(0,7):'?'; bm[k]=(bm[k]||0)+1; });
@@ -6052,6 +6058,12 @@ function abrirModalProtocolo() {
   if (as) as.value = `Protocolo de Documentos ${_gerarNumProtocolo()} — Manutenção`;
   const ba = document.getElementById('prot-bols-adicionados'); if (ba) ba.innerHTML = '';
   const bu = document.getElementById('prot-busca'); if (bu) bu.value = '';
+  // Popular select de consultores
+  const selCons = document.getElementById('prot-consultor');
+  if (selCons) {
+    selCons.innerHTML = '<option value="">Selecione o consultor...</option>' +
+      operadores.map(op => `<option value="${op.nome}">${op.nome}${op.setor?' ('+op.setor+')':''}</option>`).join('');
+  }
   protStep(1);
 }
 function fecharModalProtocolo() { const m=document.getElementById('modal-protocolo'); if(m) m.style.display='none'; }
@@ -6059,6 +6071,7 @@ function fecharModalProtocolo() { const m=document.getElementById('modal-protoco
 function protStep(n) {
   if (n < 1) n = 1; if (n > 3) n = 3;
   if (n === 2 && !_protDocsSelected.length) { toast('Selecione ao menos 1 documento.', 'error'); return; }
+  if (n === 2 && !document.getElementById('prot-consultor')?.value) { toast('Selecione o consultor responsável.', 'error'); return; }
   if (n === 3) {
     const em = document.getElementById('prot-email')?.value?.trim();
     if (!em || !em.includes('@')) { toast('Informe um e-mail de destino válido.', 'error'); return; }
@@ -6213,11 +6226,13 @@ function _atualizarResumoS3() {
   const n   = _protDocsSelected.length;
   const tot = _protDocsSelected.reduce((s,d)=>s+(d.valor||0),0);
   const em  = document.getElementById('prot-email')?.value||'—';
+  const cons = document.getElementById('prot-consultor')?.value||'—';
   const tipos = [...new Set(_protDocsSelected.map(d=>({os:'OS',nf:'Nota Fiscal',boleto:'Boleto'}[d.tipo]||d.tipo)))].join(', ');
   const r = document.getElementById('prot-resumo-s3');
   if (r) r.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
     <div><strong>Protocolo N°:</strong> ${_gerarNumProtocolo()}</div>
     <div><strong>Para:</strong> ${em}</div>
+    <div><strong>Consultor:</strong> <span style="color:var(--accent);font-weight:600;">${cons}</span></div>
     <div><strong>Documentos:</strong> ${n} (${tipos||'—'})</div>
     <div><strong>Valor Total:</strong> <span style="color:var(--green-tx);font-weight:700;">R$ ${tot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
   </div>
@@ -6280,6 +6295,7 @@ function _abrirPrintProtocolo(prot) {
   <div class="meta">
     <div><strong>Remetente:</strong> ${remetente||'—'}</div>
     <div><strong>Destinatário:</strong> ${destinatario||'—'}</div>
+    <div><strong>Consultor Responsável:</strong> ${prot.consultor||'—'}</div>
   </div>
   ${obs?`<div class="obs"><strong>Observações:</strong> ${obs}</div>`:''}
   <table>
@@ -6341,14 +6357,15 @@ function enviarProtocolo() {
   const obs    = document.getElementById('prot-obs')?.value||'';
   const cc     = document.getElementById('prot-cc')?.value||'';
   const assunto= document.getElementById('prot-assunto')?.value||`Protocolo ${num}`;
-  const solC   = document.getElementById('prot-solicitar-conf')?.checked!==false;
+  const solC      = document.getElementById('prot-solicitar-conf')?.checked!==false;
+  const consultor = (document.getElementById('prot-consultor')?.value||'').trim();
   const prot   = { id:num, numero:num, data_envio:agora.toISOString(), destinatario:email,
-    remetente:currentUser?.nome||'', assunto, documentos:[..._protDocsSelected],
+    remetente:currentUser?.nome||'', consultor, assunto, documentos:[..._protDocsSelected],
     valor_total:total, assinatura:sig, status:'enviado', confirmacao:null,
     confirmado_por:null, data_confirmacao:null, obs, solicitar_confirmacao:solC };
   protocolDB.push(prot); salvarProtocolos();
   const linhas = _protDocsSelected.map(d=>`• ${({os:'OS',nf:'NF',boleto:'Boleto'}[d.tipo]||d.tipo).toUpperCase()} ${d.numero||'—'} — ${d.fornecedor||'—'} — R$ ${(d.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`).join('\n');
-  const corpo  = [`Prezado(a),`,``,`Encaminho o ${assunto} com os documentos listados abaixo, para análise e providências.`,``,`DOCUMENTOS (${_protDocsSelected.length}):`,linhas,``,`VALOR TOTAL: R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}`,``,obs?`OBSERVAÇÕES:\n${obs}\n`:'',solC?`Por favor, confirme o recebimento respondendo este e-mail.`:'',``,`Atenciosamente,`,`${currentUser?.nome||''} — Equipe NF · Manutenção`,`Enviado em: ${agora.toLocaleString('pt-BR')}`].join('\n');
+  const corpo  = [`Prezado(a),`,``,`Encaminho o ${assunto} com os documentos listados abaixo, para análise e providências.`,``,`DOCUMENTOS (${_protDocsSelected.length}):`,linhas,``,`VALOR TOTAL: R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}`,``,obs?`OBSERVAÇÕES:\n${obs}\n`:'',solC?`Por favor, confirme o recebimento respondendo este e-mail.`:'',``,`Atenciosamente,`,`${currentUser?.nome||''} — Equipe NF · Manutenção`,consultor?`Consultor responsável: ${consultor}`:'',`Enviado em: ${agora.toLocaleString('pt-BR')}`].join('\n');
   const ccPart = cc ? `cc=${encodeURIComponent(cc)}&` : '';
   window.open(`mailto:${email}?${ccPart}subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`, '_blank');
   toast(`Protocolo ${num} registrado! E-mail preparado no seu cliente de e-mail.`, 'success');
@@ -6449,7 +6466,7 @@ const DASH_METRICAS = [
   { id:'vencimentos',label:'Vencimentos 7 dias',  icon:'⏰', vizs:['numero','barra','tabela'] },
   { id:'status',     label:'NFs por Status',      icon:'🏷️', vizs:['pizza','barra','tabela'] },
   { id:'fornecedor', label:'Top Fornecedores',    icon:'🏭', vizs:['barra','pizza','tabela'] },
-  { id:'operador',   label:'Por Operador',        icon:'👷', vizs:['barra','tabela'] },
+  { id:'operador',   label:'Por Consultor',        icon:'👷', vizs:['barra','tabela'] },
   { id:'tendencia',  label:'Tendência Mensal',    icon:'📈', vizs:['linha','barra'] },
   { id:'recebidas',  label:'Recebidas do Posto',  icon:'📥', vizs:['numero','tabela'] },
 ];
@@ -7905,7 +7922,7 @@ function buildPageOperadores() {
   if (!tbody) return;
 
   if (!operadores.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted);">Nenhum operador cadastrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted);">Nenhum consultor cadastrado.</td></tr>`;
     return;
   }
 
@@ -7929,7 +7946,7 @@ function abrirModalOperador(id) {
   document.getElementById('op-nome').value  = '';
   document.getElementById('op-email').value = '';
   document.getElementById('op-login').value = '';
-  document.getElementById('op-form-title').textContent = 'Novo Operador';
+  document.getElementById('op-form-title').textContent = 'Novo Consultor';
 
   if (id) {
     const op = operadores.find(o=>o.id===id);
@@ -7938,7 +7955,7 @@ function abrirModalOperador(id) {
       document.getElementById('op-email').value = op.email || '';
       document.getElementById('op-login').value = op.login || '';
       document.getElementById('op-setor').value = op.setor || '';
-      document.getElementById('op-form-title').textContent = 'Editar Operador';
+      document.getElementById('op-form-title').textContent = 'Editar Consultor';
     }
   }
   document.getElementById('op-form-box').style.display = 'block';
@@ -7957,7 +7974,7 @@ function salvarOperador() {
   const login = document.getElementById('op-login').value.trim();
   const id    = document.getElementById('op-id').value;
 
-  if (!nome) { toast('Informe o nome do operador.', 'error'); return; }
+  if (!nome) { toast('Informe o nome do consultor.', 'error'); return; }
   if (!setor) { toast('Selecione o setor.', 'error'); return; }
 
   if (id) {
@@ -7970,16 +7987,16 @@ function salvarOperador() {
   saveOperadores();
   fecharModalOperador();
   buildPageOperadores();
-  toast(`Operador "${nome}" salvo.`, 'success');
+  toast(`Consultor "${nome}" salvo.`, 'success');
 }
 
 function deletarOperador(id) {
   const op = operadores.find(o=>o.id===id);
-  if (!op || !confirm(`Remover operador "${op.nome}"?`)) return;
+  if (!op || !confirm(`Remover consultor "${op.nome}"?`)) return;
   operadores = operadores.filter(o=>o.id!==id);
   saveOperadores();
   buildPageOperadores();
-  toast('Operador removido.', 'success');
+  toast('Consultor removido.', 'success');
 }
 
 // ============================================================
