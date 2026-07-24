@@ -1199,14 +1199,18 @@ tr:hover td{background:rgba(0,0,0,.025)}
 
       <!-- STEP 1: Seletor de documentos -->
       <div id="prot-s1" style="display:none;">
-        <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px;">
-          <button class="tab-btn" id="prot-tab-nf"  onclick="protAba('nf')">📄 Notas Fiscais</button>
-          <button class="tab-btn" id="prot-tab-os"  onclick="protAba('os')">🔧 OS</button>
+        <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px;align-items:center;">
+          <button class="tab-btn active" id="prot-tab-nf"  onclick="protAba('nf')">📄 Notas Fiscais</button>
           <button class="tab-btn" id="prot-tab-bol" onclick="protAba('bol')">🧾 Boleto Manual</button>
+          <button class="tab-btn" id="prot-tab-os"  onclick="protAba('os')" style="font-size:10px;color:var(--muted);margin-left:auto;">+ OS Manual</button>
+        </div>
+        <div style="font-size:11px;color:#059669;background:#ecfdf5;border-radius:6px;padding:6px 10px;margin-bottom:8px;">
+          ✅ Selecione a nota fiscal — OS e boleto vinculados serão adicionados automaticamente.
         </div>
         <input type="text" id="prot-busca" placeholder="Buscar por fornecedor, número…" class="input-base"
           oninput="_filtrarDocsProt()" style="width:100%;margin-bottom:10px;box-sizing:border-box;">
         <div id="prot-lista-nf" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
+        <div id="prot-auto-vinculados"></div>
         <div id="prot-lista-os" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;"></div>
         <div id="prot-lista-bol" style="display:none;padding:14px;border:1px solid var(--border);border-radius:8px;">
           <div style="font-size:12px;font-weight:600;margin-bottom:10px;">Adicionar Boleto manualmente</div>
@@ -3692,23 +3696,31 @@ function salvarLote() {
   if (osNovos) partes.push(`${osNovos} OS salva${osNovos>1?'s':''}`);
   if (nfs)     partes.push(`${nfs} NF${nfs>1?'s':''} identificada${nfs>1?'s':''}`);
   if (bols)    partes.push(`${bols} boleto${bols>1?'s':''} identificado${bols>1?'s':''}`);
-  // Aplicar vínculos NF↔OS identificados pelo cruzamento
+  // Aplicar vínculos NF↔OS e NF↔Boleto identificados pelo cruzamento
   try {
     const base = JSON.parse(localStorage.getItem('pnf_base') || '[]');
-    let vinculosNovos = 0;
+    let vinculosNovos = 0, boletosNovos = 0;
     for (const r of _loteResultados) {
-      if ((r.tipo!=='nfe' && r.tipo!=='nfse') || r.erro || !r._matchOS) continue;
-      const osNum = r._matchOS.numero;
+      if ((r.tipo!=='nfe' && r.tipo!=='nfse') || r.erro) continue;
       const d = r.dados;
       const idx = base.findIndex(nf =>
         (d.chave && nf.chave && nf.chave === d.chave) ||
         (d.numero && nf.numero && String(nf.numero) === String(d.numero))
       );
-      if (idx >= 0 && !base[idx].os) { base[idx].os = osNum; vinculosNovos++; }
+      if (idx < 0) continue;
+      if (r._matchOS && !base[idx].os) { base[idx].os = r._matchOS.numero; vinculosNovos++; }
+      if (r._matchBoleto && !base[idx]._boleto) {
+        const bolR = _loteResultados.find(b => b.arquivo === r._matchBoleto.ref);
+        if (bolR && bolR.dados) {
+          base[idx]._boleto = { beneficiario: bolR.dados.beneficiario||'', valor: bolR.dados.valor||0, vencimento: bolR.dados.vencimento||'' };
+          boletosNovos++;
+        }
+      }
     }
-    if (vinculosNovos > 0) {
+    if (vinculosNovos > 0 || boletosNovos > 0) {
       localStorage.setItem('pnf_base', JSON.stringify(base));
-      partes.push(`${vinculosNovos} vínculo${vinculosNovos>1?'s':''} NF↔OS`);
+      if (vinculosNovos > 0) partes.push(`${vinculosNovos} vínculo${vinculosNovos>1?'s':''} NF↔OS`);
+      if (boletosNovos > 0) partes.push(`${boletosNovos} vínculo${boletosNovos>1?'s':''} NF↔Boleto`);
     }
   } catch(e) {}
   if (partes.length) {
@@ -6094,6 +6106,11 @@ function _renderListaProt(tipo) {
     const val  = parseFloat(r.valor)||0;
     const dat  = r.data ? r.data.split('-').reverse().join('/') : '—';
     const chk  = _protDocsSelected.some(d=>d.uid===uid)?'checked':'';
+    // Badges de vínculos automáticos (só para NF)
+    const vincBadges = tipo==='nf' ? [
+      r.os     ? `<span style="background:#dcfce7;color:#166534;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;">🔧 OS ${r.os}</span>` : '',
+      r._boleto? `<span style="background:#fef9c3;color:#854d0e;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;">🧾 Boleto</span>` : '',
+    ].filter(Boolean).join(' ') : '';
     return `<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
       <input type="checkbox" ${chk} style="width:14px;height:14px;flex-shrink:0;"
         data-uid="${uid}" data-tipo="${tipo}" data-numero="${num}" data-fornecedor="${forn}" data-valor="${val}" data-data="${r.data||''}"
@@ -6101,7 +6118,10 @@ function _renderListaProt(tipo) {
       <span style="${badgeStyle}">${label}</span>
       <div style="flex:1;min-width:0;">
         <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.fornecedor||'—'}</div>
-        <div style="font-size:11px;color:var(--muted);">N° ${num||'—'} · ${dat}${tipo==='os'&&r.status?' · '+r.status:''}</div>
+        <div style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+          <span>N° ${num||'—'} · ${dat}${tipo==='os'&&r.status?' · '+r.status:''}</span>
+          ${vincBadges}
+        </div>
       </div>
       <div style="font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0;">R$ ${val.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
     </label>`;
@@ -6116,12 +6136,48 @@ function _filtrarDocsProt() {
 function _toggleDocProt(el) {
   const uid = el.dataset.uid;
   if (el.checked) {
-    if (!_protDocsSelected.some(d=>d.uid===uid))
-      _protDocsSelected.push({ uid, tipo:el.dataset.tipo, numero:el.dataset.numero, fornecedor:el.dataset.fornecedor, valor:parseFloat(el.dataset.valor)||0, data:el.dataset.data });
+    if (!_protDocsSelected.some(d => d.uid === uid)) {
+      _protDocsSelected.push({ uid, tipo: el.dataset.tipo, numero: el.dataset.numero, fornecedor: el.dataset.fornecedor, valor: parseFloat(el.dataset.valor)||0, data: el.dataset.data });
+      // Auto-vincular OS e boleto quando NF é selecionada
+      if (el.dataset.tipo === 'nf') {
+        const nfObj = baseNF.find(n => `nf-${n.id||n.chave}` === uid);
+        if (nfObj) {
+          if (nfObj.os) {
+            const os = (osDB||[]).find(o => String(o.numero).replace(/\D/g,'') === String(nfObj.os).replace(/\D/g,''));
+            if (os) {
+              const osUid = `os-auto-${uid}`;
+              if (!_protDocsSelected.some(d => d.uid === osUid))
+                _protDocsSelected.push({ uid: osUid, tipo:'os', numero: os.numero, fornecedor: os.fornecedor||'', valor: os.valor||0, data: os.data||'', _autoFrom: uid });
+            }
+          }
+          if (nfObj._boleto) {
+            const bolUid = `bol-auto-${uid}`;
+            if (!_protDocsSelected.some(d => d.uid === bolUid))
+              _protDocsSelected.push({ uid: bolUid, tipo:'boleto', numero:'', fornecedor: nfObj._boleto.beneficiario||nfObj.fornecedor||'', valor: nfObj._boleto.valor||nfObj.valor||0, data: nfObj._boleto.vencimento||'', _autoFrom: uid });
+          }
+        }
+      }
+    }
   } else {
-    _protDocsSelected = _protDocsSelected.filter(d => d.uid!==uid);
+    // Remove a NF e todos os docs vinculados automaticamente a ela
+    _protDocsSelected = _protDocsSelected.filter(d => d.uid !== uid && d._autoFrom !== uid);
   }
   _atualizarContadorProt();
+  _atualizarAutoVinculados();
+}
+
+function _atualizarAutoVinculados() {
+  const el = document.getElementById('prot-auto-vinculados'); if (!el) return;
+  const auto = _protDocsSelected.filter(d => d._autoFrom);
+  if (!auto.length) { el.innerHTML = ''; return; }
+  const oss  = auto.filter(d => d.tipo === 'os');
+  const bols = auto.filter(d => d.tipo === 'boleto');
+  const parts = [];
+  if (oss.length)  parts.push(`🔧 OS ${oss.map(d => d.numero).join(', ')}`);
+  if (bols.length) parts.push(`🧾 ${bols.length} Boleto${bols.length>1?'s':''}`);
+  el.innerHTML = `<div style="margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:8px;font-size:11px;border-left:3px solid #10b981;color:var(--text);">
+    <span style="font-weight:700;color:#059669;">Vinculados automaticamente:</span> ${parts.join(' · ')}
+  </div>`;
 }
 
 function _adicionarBoletoManual() {
