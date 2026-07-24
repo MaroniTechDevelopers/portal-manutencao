@@ -285,6 +285,12 @@ tr:hover td{background:rgba(0,0,0,.025)}
 .page-header{padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:22px;}
 .page-header h2{font-size:20px;font-weight:800;letter-spacing:-.3px;}
 .page-header p{margin-top:4px;font-size:13px;color:var(--muted);}
+/* Protocolo Financeiro */
+.prot-step-ind{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--border);color:var(--muted);flex-shrink:0;}
+.prot-step-label{font-size:11px;color:var(--muted);margin:0 6px;white-space:nowrap;}
+.tab-btn{padding:7px 14px;font-size:12px;font-weight:600;border:none;border-bottom:2px solid transparent;background:none;color:var(--muted);cursor:pointer;transition:color .15s,border-color .15s;}
+.tab-btn.active,.tab-btn:focus{color:var(--text);border-bottom-color:var(--accent);outline:none;}
+.tab-btn:hover:not(.active){color:var(--text);}
 </style>
 </head>
 <body>
@@ -1171,6 +1177,118 @@ tr:hover td{background:rgba(0,0,0,.025)}
   </div>
 </div>
 
+<!-- MODAL: Protocolo Financeiro -->
+<div id="modal-protocolo" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalProtocolo()">
+  <div class="modal" style="max-width:700px;width:96%;max-height:92vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div class="modal-title">📤 Novo Protocolo de Envio ao Financeiro</div>
+      <button class="modal-close" onclick="fecharModalProtocolo()">✕</button>
+    </div>
+    <!-- Step indicator -->
+    <div style="display:flex;align-items:center;padding:10px 20px;border-bottom:1px solid var(--border);">
+      <div class="prot-step-ind" id="prot-sind-1">1</div>
+      <div class="prot-step-label" id="prot-slbl-1">Documentos</div>
+      <div style="flex:1;height:2px;background:var(--border);margin:0 4px;" id="prot-sline-1"></div>
+      <div class="prot-step-ind" id="prot-sind-2">2</div>
+      <div class="prot-step-label" id="prot-slbl-2">Envio</div>
+      <div style="flex:1;height:2px;background:var(--border);margin:0 4px;" id="prot-sline-2"></div>
+      <div class="prot-step-ind" id="prot-sind-3">3</div>
+      <div class="prot-step-label" id="prot-slbl-3">Assinar</div>
+    </div>
+    <div class="modal-body" style="flex:1;overflow-y:auto;">
+
+      <!-- STEP 1: Seletor de documentos -->
+      <div id="prot-s1" style="display:none;">
+        <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:12px;">
+          <button class="tab-btn" id="prot-tab-nf"  onclick="protAba('nf')">📄 Notas Fiscais</button>
+          <button class="tab-btn" id="prot-tab-os"  onclick="protAba('os')">🔧 OS</button>
+          <button class="tab-btn" id="prot-tab-bol" onclick="protAba('bol')">🧾 Boleto Manual</button>
+        </div>
+        <input type="text" id="prot-busca" placeholder="Buscar por fornecedor, número…" class="input-base"
+          oninput="_filtrarDocsProt()" style="width:100%;margin-bottom:10px;box-sizing:border-box;">
+        <div id="prot-lista-nf" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;"></div>
+        <div id="prot-lista-os" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;display:none;"></div>
+        <div id="prot-lista-bol" style="display:none;padding:14px;border:1px solid var(--border);border-radius:8px;">
+          <div style="font-size:12px;font-weight:600;margin-bottom:10px;">Adicionar Boleto manualmente</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><label style="font-size:11px;font-weight:600;">Beneficiário</label><input type="text" id="bol-forn" class="input-base" placeholder="Nome da empresa" style="width:100%;box-sizing:border-box;margin-top:3px;"></div>
+            <div><label style="font-size:11px;font-weight:600;">Valor (R$)</label><input type="number" id="bol-valor" class="input-base" placeholder="0,00" step="0.01" min="0" style="width:100%;box-sizing:border-box;margin-top:3px;"></div>
+            <div><label style="font-size:11px;font-weight:600;">Vencimento</label><input type="date" id="bol-data" class="input-base" style="width:100%;box-sizing:border-box;margin-top:3px;"></div>
+            <div><label style="font-size:11px;font-weight:600;">Referência / Número</label><input type="text" id="bol-num" class="input-base" placeholder="Opcional" style="width:100%;box-sizing:border-box;margin-top:3px;"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="_adicionarBoletoManual()">+ Adicionar Boleto</button>
+          <div id="prot-bols-adicionados" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;"></div>
+        </div>
+        <div style="margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:8px;display:flex;align-items:center;">
+          <span id="prot-sel-count" style="font-size:12px;color:var(--muted);">0 itens selecionados</span>
+          <span style="font-size:12px;font-weight:700;margin-left:auto;">Total: <span id="prot-sel-total" style="color:var(--green-tx);">R$ 0,00</span></span>
+        </div>
+      </div>
+
+      <!-- STEP 2: Configurar envio -->
+      <div id="prot-s2" style="display:none;">
+        <div style="display:grid;gap:14px;">
+          <div>
+            <label style="font-size:12px;font-weight:600;">Para (e-mail do destinatário) *</label>
+            <input type="email" id="prot-email" class="input-base" placeholder="financeiro@transmaroni.com.br" style="width:100%;box-sizing:border-box;margin-top:4px;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;">CC (outros e-mails, separados por vírgula)</label>
+            <input type="text" id="prot-cc" class="input-base" placeholder="Opcional" style="width:100%;box-sizing:border-box;margin-top:4px;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;">Assunto</label>
+            <input type="text" id="prot-assunto" class="input-base" style="width:100%;box-sizing:border-box;margin-top:4px;">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:600;">Observações / Mensagem adicional</label>
+            <textarea id="prot-obs" class="input-base" rows="4"
+              placeholder="Prezado(a), segue protocolo de documentos para análise e providências…"
+              style="width:100%;box-sizing:border-box;margin-top:4px;resize:vertical;"></textarea>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="prot-solicitar-conf" checked style="width:14px;height:14px;flex-shrink:0;">
+            Solicitar confirmação de leitura (incluir aviso no corpo do e-mail)
+          </label>
+        </div>
+      </div>
+
+      <!-- STEP 3: Assinar e Enviar -->
+      <div id="prot-s3" style="display:none;">
+        <div id="prot-resumo-s3" style="padding:12px 14px;background:var(--bg);border-radius:8px;font-size:12px;margin-bottom:16px;line-height:1.9;border-left:3px solid var(--accent);"></div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Assinatura do Gestor da Equipe NF</div>
+        <div style="position:relative;border:2px dashed var(--border);border-radius:8px;overflow:hidden;background:#fff;">
+          <canvas id="prot-sig-canvas" width="620" height="150"
+            style="width:100%;height:150px;cursor:crosshair;touch-action:none;display:block;"></canvas>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;" id="prot-sig-hint">
+            <span style="font-size:12px;color:#ccc;user-select:none;">Assine com o mouse ou dedo acima</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <button class="btn btn-secondary btn-sm" onclick="limparAssinaturaProtocolo()">Limpar assinatura</button>
+          <button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="imprimirProtocoloPreview()">🖨️ Ver impressão</button>
+        </div>
+        <div style="margin-top:14px;padding:10px 14px;background:var(--accent-dim);border-radius:8px;font-size:11px;color:var(--muted);">
+          📌 Ao enviar: o protocolo é registrado, o cliente de e-mail abre com a mensagem pronta.
+          Imprima o protocolo e leve junto com os documentos originais para assinatura do responsável e do dono.
+        </div>
+      </div>
+
+    </div>
+    <!-- Footer -->
+    <div class="modal-footer" style="justify-content:space-between;">
+      <div style="display:flex;gap:8px;">
+        <button id="prot-btn-voltar" class="btn btn-secondary btn-sm" style="display:none;" onclick="protStep(_protStep-1)">← Voltar</button>
+        <button class="btn btn-secondary btn-sm" onclick="fecharModalProtocolo()">Cancelar</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="prot-btn-avancar" class="btn btn-primary btn-sm" onclick="protStep(_protStep+1)">Avançar →</button>
+        <button id="prot-btn-enviar" class="btn btn-primary btn-sm" style="display:none;background:#059669;border-color:#059669;" onclick="enviarProtocolo()">📤 Registrar e Enviar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Configurar Hub de E-mail -->
 <div id="modal-email-hub" class="modal-overlay hidden" onclick="if(event.target===this)fecharModalEmailHub()">
   <div class="modal" style="max-width:480px;width:96%;">
@@ -1632,6 +1750,61 @@ tr:hover td{background:rgba(0,0,0,.025)}
     <div style="margin-top:14px;padding:10px 14px;background:var(--accent-dim);border-radius:8px;border:1px solid rgba(245,200,0,.2);">
       <div style="font-size:11px;font-weight:700;color:var(--text);">📋 Próximo passo</div>
       <div style="font-size:11px;color:var(--muted);margin-top:3px;">Forneça o manual da Microsoft Graph API ou do Power Automate para conectar os agentes de captura de e-mail e alertas automáticos.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PROTOCOLO FINANCEIRO ===== -->
+<div id="page-protocolo" class="page">
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2>Protocolo Financeiro</h2>
+      <p>Envio formal de documentos ao financeiro — registro, assinatura digital e confirmação de leitura</p>
+    </div>
+    <button class="btn btn-primary" onclick="abrirModalProtocolo()">📤 Novo Protocolo</button>
+  </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+    <div class="kpi-card" style="--kpi-color:#3b82f6;">
+      <div class="kpi-label">📤 Enviados (mês)</div>
+      <div class="kpi-value" id="prot-kpi-mes">—</div>
+      <div class="kpi-sub">este mês</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#f59e0b;">
+      <div class="kpi-label">⏳ Aguardando</div>
+      <div class="kpi-value" id="prot-kpi-aguard">—</div>
+      <div class="kpi-sub">sem confirmação</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#10b981;">
+      <div class="kpi-label">✅ Confirmados</div>
+      <div class="kpi-value" id="prot-kpi-conf">—</div>
+      <div class="kpi-sub">leitura confirmada</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:#8b5cf6;">
+      <div class="kpi-label">💰 Valor (mês)</div>
+      <div class="kpi-value" id="prot-kpi-valor">—</div>
+      <div class="kpi-sub">em documentos</div>
+    </div>
+  </div>
+
+  <!-- Tabela de protocolos -->
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <div class="card-title" style="margin:0;">Histórico de Protocolos</div>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <select id="prot-filtro-status" class="input-filter" style="width:150px;" onchange="renderTabelaProtocolos()">
+          <option value="">Todos os status</option>
+          <option value="enviado">Enviado</option>
+          <option value="confirmado">Confirmado</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="buildPageProtocolo()">↺</button>
+      </div>
+    </div>
+    <div id="tabela-protocolos">
+      <div style="text-align:center;color:var(--muted);padding:40px;font-size:14px;">
+        Nenhum protocolo ainda.<br><small>Clique em "Novo Protocolo" para começar.</small>
+      </div>
     </div>
   </div>
 </div>
@@ -2369,6 +2542,7 @@ const TODAS_TELAS = [
   { page:'comunicacao',  icon:'💬', label:'Pendências',           secao:'Controle' },
   { page:'agentes',      icon:'🤖', label:'Agentes IA',           secao:'Controle' },
   { page:'importar',     icon:'📥', label:'Importar & Processar', secao:'Operação' },
+  { page:'protocolo',   icon:'📤', label:'Protocolo Financeiro',  secao:'Operação' },
   { page:'ni-lote',      icon:'🏷️', label:'Classificar NIs',     secao:'Operação' },
   { page:'mapeamento',   icon:'🏢', label:'Mapeamento de Setores',secao:'Config.' },
   { page:'colunas',      icon:'⚙️', label:'Colunas',             secao:'Config.' },
@@ -5606,11 +5780,367 @@ function goToBase(filtros = {}) {
 }
 
 // ============================================================
+// PROTOCOLO FINANCEIRO
+// ============================================================
+const SK_PROT = 'portal_protocolos';
+let protocolDB = [];
+let _protStep = 1;
+let _protAbaAtiva = 'nf';
+let _protDocsSelected = [];
+let _protSigCanvas = null, _protSigCtx = null, _protSigDrawing = false;
+
+function carregarProtocolos() {
+  try { protocolDB = JSON.parse(localStorage.getItem(SK_PROT) || '[]'); } catch(e) { protocolDB = []; }
+}
+function salvarProtocolos() { localStorage.setItem(SK_PROT, JSON.stringify(protocolDB)); }
+
+function buildPageProtocolo() {
+  carregarProtocolos();
+  const mesStr = new Date().toISOString().substring(0, 7);
+  const doMes  = protocolDB.filter(p => (p.data_envio || '').startsWith(mesStr));
+  setText('prot-kpi-mes',   doMes.length.toString());
+  setText('prot-kpi-aguard', protocolDB.filter(p => p.status === 'enviado').length.toString());
+  setText('prot-kpi-conf',   protocolDB.filter(p => p.status === 'confirmado').length.toString());
+  const vm = doMes.reduce((s, p) => s + (p.valor_total || 0), 0);
+  setText('prot-kpi-valor', 'R$ ' + vm.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}));
+  renderTabelaProtocolos();
+}
+
+function renderTabelaProtocolos() {
+  const filtro = document.getElementById('prot-filtro-status')?.value || '';
+  const lista  = (filtro ? protocolDB.filter(p => p.status === filtro) : [...protocolDB])
+                   .sort((a, b) => new Date(b.data_envio) - new Date(a.data_envio));
+  const el = document.getElementById('tabela-protocolos'); if (!el) return;
+  if (!lista.length) {
+    el.innerHTML = `<div style="text-align:center;color:var(--muted);padding:40px;font-size:14px;">Nenhum protocolo${filtro ? ' com este status' : ''}.<br><small>Clique em "Novo Protocolo" para começar.</small></div>`;
+    return;
+  }
+  const badge = { enviado:'<span class="badge badge-yellow">Enviado</span>', confirmado:'<span class="badge badge-green">Confirmado</span>' };
+  el.innerHTML = `<div style="overflow-x:auto;"><table class="tabela-base" style="min-width:720px;">
+    <thead><tr><th>Protocolo</th><th>Data / Hora</th><th>Para</th><th>Remetente</th>
+      <th style="text-align:center">Docs</th><th style="text-align:right">Total</th>
+      <th>Status</th><th>Ações</th></tr></thead><tbody>
+    ${lista.map(p => {
+      const dt = new Date(p.data_envio).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      const confExtra = p.status==='confirmado'
+        ? `<br><small style="color:var(--muted);font-size:10px;">por ${p.confirmado_por||'—'} · ${new Date(p.data_confirmacao).toLocaleDateString('pt-BR')}</small>` : '';
+      return `<tr>
+        <td><strong>${p.id}</strong></td>
+        <td style="font-size:11px;white-space:nowrap;">${dt}</td>
+        <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${p.destinatario}">${p.destinatario}</td>
+        <td style="font-size:11px;">${p.remetente}</td>
+        <td style="text-align:center;font-size:12px;">${(p.documentos||[]).length}</td>
+        <td style="text-align:right;font-size:12px;white-space:nowrap;">R$ ${(p.valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
+        <td>${badge[p.status]||p.status}${confExtra}</td>
+        <td><div style="display:flex;gap:4px;">
+          <button class="btn btn-secondary btn-sm" onclick="imprimirProtocoloById('${p.id}')" title="Imprimir protocolo">🖨️</button>
+          ${p.status!=='confirmado'?`<button class="btn btn-secondary btn-sm" onclick="confirmarLeituraProtocolo('${p.id}')" title="Confirmar leitura">✅</button>`:''}
+          <button class="btn btn-secondary btn-sm" onclick="reenviarProtocolo('${p.id}')" title="Reenviar e-mail">↺</button>
+        </div></td>
+      </tr>`;
+    }).join('')}
+    </tbody></table></div>`;
+}
+
+function _gerarNumProtocolo() {
+  const d  = new Date();
+  const ym = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
+  const n  = protocolDB.filter(p => p.id && p.id.includes(`-${ym}-`)).length + 1;
+  return `PROT-${ym}-${String(n).padStart(3,'0')}`;
+}
+
+function abrirModalProtocolo() {
+  carregarProtocolos(); carregarOS();
+  _protStep = 1; _protAbaAtiva = 'nf'; _protDocsSelected = []; _protSigCanvas = null;
+  const m = document.getElementById('modal-protocolo'); if (m) m.style.display = '';
+  const as = document.getElementById('prot-assunto');
+  if (as) as.value = `Protocolo de Documentos ${_gerarNumProtocolo()} — Manutenção`;
+  const ba = document.getElementById('prot-bols-adicionados'); if (ba) ba.innerHTML = '';
+  const bu = document.getElementById('prot-busca'); if (bu) bu.value = '';
+  protStep(1);
+}
+function fecharModalProtocolo() { const m=document.getElementById('modal-protocolo'); if(m) m.style.display='none'; }
+
+function protStep(n) {
+  if (n < 1) n = 1; if (n > 3) n = 3;
+  if (n === 2 && !_protDocsSelected.length) { toast('Selecione ao menos 1 documento.', 'error'); return; }
+  if (n === 3) {
+    const em = document.getElementById('prot-email')?.value?.trim();
+    if (!em || !em.includes('@')) { toast('Informe um e-mail de destino válido.', 'error'); return; }
+  }
+  _protStep = n;
+  [1,2,3].forEach(i => { const s=document.getElementById(`prot-s${i}`); if(s) s.style.display = i===n ? '' : 'none'; });
+  [1,2,3].forEach(i => {
+    const ind=document.getElementById(`prot-sind-${i}`), lbl=document.getElementById(`prot-slbl-${i}`), ln=document.getElementById(`prot-sline-${i}`);
+    if (ind) { ind.style.background = i<=n?'var(--accent)':'var(--border)'; ind.style.color = i<=n?'#fff':'var(--muted)'; }
+    if (lbl) { lbl.style.fontWeight = i===n?'700':'400'; lbl.style.color = i<=n?'var(--text)':'var(--muted)'; }
+    if (ln)  ln.style.background = i<n?'var(--accent)':'var(--border)';
+  });
+  document.getElementById('prot-btn-voltar') .style.display = n>1 ? '' : 'none';
+  document.getElementById('prot-btn-avancar').style.display = n<3 ? '' : 'none';
+  document.getElementById('prot-btn-enviar') .style.display = n===3 ? '' : 'none';
+  if (n === 1) { protAba(_protAbaAtiva); }
+  if (n === 3) { _atualizarResumoS3(); setTimeout(_initSigCanvas, 80); }
+}
+
+function protAba(aba) {
+  _protAbaAtiva = aba;
+  ['nf','os','bol'].forEach(a => {
+    document.getElementById(`prot-tab-${a}`)?.classList.toggle('active', a===aba);
+    const l=document.getElementById(`prot-lista-${a}`); if(l) l.style.display = a===aba?'':'none';
+  });
+  if (aba==='nf') _renderListaProt('nf');
+  if (aba==='os') _renderListaProt('os');
+}
+
+function _renderListaProt(tipo) {
+  const busca = (document.getElementById('prot-busca')?.value || '').toLowerCase().trim();
+  const el = document.getElementById(`prot-lista-${tipo}`); if (!el) return;
+  const fonte = tipo==='nf'
+    ? baseNF.filter(r => r.situacao!=='Cancelado' && (!busca||(r.fornecedor||'').toLowerCase().includes(busca)||(r.numero||'').toLowerCase().includes(busca))).slice(0,120)
+    : osDB.filter(r => (!busca||(r.fornecedor||'').toLowerCase().includes(busca)||(r.numero||'').toLowerCase().includes(busca))).slice(0,120);
+  if (!fonte.length) { el.innerHTML=`<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">Nenhum ${tipo==='nf'?'nota fiscal':'OS'} encontrado</div>`; return; }
+  const badgeStyle = tipo==='nf'
+    ? 'background:#dbeafe;color:#1d4ed8;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;'
+    : 'background:#dcfce7;color:#166534;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;';
+  const label = tipo==='nf'?'NF':'OS';
+  el.innerHTML = fonte.map((r, i) => {
+    const uid  = `${tipo}-${r.id||r.chave||i}`;
+    const num  = r.numero || '';
+    const forn = (r.fornecedor||'').replace(/"/g,'&quot;');
+    const val  = parseFloat(r.valor)||0;
+    const dat  = r.data ? r.data.split('-').reverse().join('/') : '—';
+    const chk  = _protDocsSelected.some(d=>d.uid===uid)?'checked':'';
+    return `<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <input type="checkbox" ${chk} style="width:14px;height:14px;flex-shrink:0;"
+        data-uid="${uid}" data-tipo="${tipo}" data-numero="${num}" data-fornecedor="${forn}" data-valor="${val}" data-data="${r.data||''}"
+        onchange="_toggleDocProt(this)">
+      <span style="${badgeStyle}">${label}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.fornecedor||'—'}</div>
+        <div style="font-size:11px;color:var(--muted);">N° ${num||'—'} · ${dat}${tipo==='os'&&r.status?' · '+r.status:''}</div>
+      </div>
+      <div style="font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0;">R$ ${val.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+    </label>`;
+  }).join('');
+}
+
+function _filtrarDocsProt() {
+  if (_protAbaAtiva==='nf') _renderListaProt('nf');
+  if (_protAbaAtiva==='os') _renderListaProt('os');
+}
+
+function _toggleDocProt(el) {
+  const uid = el.dataset.uid;
+  if (el.checked) {
+    if (!_protDocsSelected.some(d=>d.uid===uid))
+      _protDocsSelected.push({ uid, tipo:el.dataset.tipo, numero:el.dataset.numero, fornecedor:el.dataset.fornecedor, valor:parseFloat(el.dataset.valor)||0, data:el.dataset.data });
+  } else {
+    _protDocsSelected = _protDocsSelected.filter(d => d.uid!==uid);
+  }
+  _atualizarContadorProt();
+}
+
+function _adicionarBoletoManual() {
+  const forn  = document.getElementById('bol-forn')?.value?.trim();
+  const valor = parseFloat(document.getElementById('bol-valor')?.value) || 0;
+  const data  = document.getElementById('bol-data')?.value || '';
+  const num   = document.getElementById('bol-num')?.value?.trim() || '';
+  if (!forn || !valor) { toast('Informe beneficiário e valor do boleto.', 'error'); return; }
+  const uid = `bol-${Date.now()}`;
+  _protDocsSelected.push({ uid, tipo:'boleto', numero:num, fornecedor:forn, valor, data });
+  _atualizarContadorProt();
+  const el = document.getElementById('prot-bols-adicionados');
+  if (el) el.innerHTML += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:6px;font-size:11px;">
+    <span style="background:#fef9c3;color:#854d0e;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;">BOL</span>
+    <span>${forn}</span><span style="font-size:11px;color:var(--muted);">${data?data.split('-').reverse().join('/'):'—'}</span>
+    <span style="margin-left:auto;font-weight:700;">R$ ${valor.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>
+    <button class="btn btn-secondary btn-sm" style="padding:1px 6px;font-size:10px;" onclick="_removerBoleto('${uid}',this)">✕</button>
+  </div>`;
+  ['bol-forn','bol-num'].forEach(id=>{const i=document.getElementById(id);if(i)i.value='';});
+  const v=document.getElementById('bol-valor');if(v)v.value='';
+  toast('Boleto adicionado.', 'success');
+}
+function _removerBoleto(uid, btn) { _protDocsSelected=_protDocsSelected.filter(d=>d.uid!==uid); btn.closest('div').remove(); _atualizarContadorProt(); }
+
+function _atualizarContadorProt() {
+  const n   = _protDocsSelected.length;
+  const tot = _protDocsSelected.reduce((s,d)=>s+(d.valor||0),0);
+  const c = document.getElementById('prot-sel-count'); if(c) c.textContent=`${n} ${n===1?'item':'itens'} selecionado${n===1?'':'s'}`;
+  const t = document.getElementById('prot-sel-total'); if(t) t.textContent='R$ '+tot.toLocaleString('pt-BR',{minimumFractionDigits:2});
+}
+
+function _atualizarResumoS3() {
+  const n   = _protDocsSelected.length;
+  const tot = _protDocsSelected.reduce((s,d)=>s+(d.valor||0),0);
+  const em  = document.getElementById('prot-email')?.value||'—';
+  const tipos = [...new Set(_protDocsSelected.map(d=>({os:'OS',nf:'Nota Fiscal',boleto:'Boleto'}[d.tipo]||d.tipo)))].join(', ');
+  const r = document.getElementById('prot-resumo-s3');
+  if (r) r.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div><strong>Protocolo N°:</strong> ${_gerarNumProtocolo()}</div>
+    <div><strong>Para:</strong> ${em}</div>
+    <div><strong>Documentos:</strong> ${n} (${tipos||'—'})</div>
+    <div><strong>Valor Total:</strong> <span style="color:var(--green-tx);font-weight:700;">R$ ${tot.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></div>
+  </div>
+  <div style="margin-top:6px;font-size:11px;color:var(--muted);">Assine abaixo para finalizar. O protocolo será registrado e o e-mail preparado automaticamente.</div>`;
+}
+
+function _initSigCanvas() {
+  const cv = document.getElementById('prot-sig-canvas'); if (!cv) return;
+  _protSigCanvas = cv; _protSigCtx = cv.getContext('2d');
+  _protSigCtx.strokeStyle='#1e293b'; _protSigCtx.lineWidth=2; _protSigCtx.lineCap='round'; _protSigDrawing=false;
+  const hint = document.getElementById('prot-sig-hint');
+  const getP = e => { const r=cv.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return {x:(s.clientX-r.left)*(cv.width/r.width),y:(s.clientY-r.top)*(cv.height/r.height)}; };
+  cv.onmousedown = cv.ontouchstart = e => { e.preventDefault(); _protSigDrawing=true; if(hint) hint.style.display='none'; const p=getP(e); _protSigCtx.beginPath(); _protSigCtx.moveTo(p.x,p.y); };
+  cv.onmousemove = cv.ontouchmove  = e => { e.preventDefault(); if(!_protSigDrawing) return; const p=getP(e); _protSigCtx.lineTo(p.x,p.y); _protSigCtx.stroke(); };
+  cv.onmouseup = cv.ontouchend = cv.onmouseleave = () => { _protSigDrawing=false; };
+}
+function limparAssinaturaProtocolo() {
+  if(_protSigCtx&&_protSigCanvas) _protSigCtx.clearRect(0,0,_protSigCanvas.width,_protSigCanvas.height);
+  const h=document.getElementById('prot-sig-hint'); if(h) h.style.display='';
+}
+
+function _isCanvasBlank(cv) { return !cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data.some(v=>v!==0); }
+
+function _abrirPrintProtocolo(prot) {
+  const {id,documentos,valor_total,remetente,destinatario,assinatura,data_envio,obs} = prot;
+  const dt  = new Date(data_envio||Date.now()).toLocaleString('pt-BR');
+  const tot = (valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+  const rows = (documentos||[]).map(d => {
+    const tp = {os:'OS',nf:'Nota Fiscal',boleto:'Boleto'}[d.tipo]||d.tipo.toUpperCase();
+    const vl = (parseFloat(d.valor)||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+    const dt2 = d.data ? d.data.split('-').reverse().join('/') : '—';
+    return `<tr><td>${tp}</td><td>${d.numero||'—'}</td><td>${d.fornecedor||'—'}</td><td style="text-align:right">R$ ${vl}</td><td>${dt2}</td></tr>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Protocolo ${id}</title>
+<style>
+  *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;margin:0;color:#111;background:#fff;}
+  .wrap{padding:15mm 18mm;max-width:210mm;margin:auto;}
+  h1{font-size:14pt;margin:0 0 2px;}
+  .sub{font-size:9pt;color:#555;margin-bottom:12px;}
+  .hdr{border-bottom:2px solid #111;margin-bottom:14px;padding-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end;}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:5px 20px;margin-bottom:14px;font-size:10pt;}
+  .meta strong{font-weight:700;}
+  .obs{border:1px solid #ddd;border-radius:4px;padding:8px;margin-bottom:14px;font-size:10pt;}
+  table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:10pt;}
+  th{background:#f2f2f2;border:1px solid #999;padding:5px 8px;text-align:left;}
+  td{border:1px solid #ccc;padding:4px 8px;}
+  tr.tot td{font-weight:700;background:#f8f8f8;}
+  .sigs{display:flex;gap:24px;flex-wrap:wrap;margin-top:22px;}
+  .sb{text-align:center;flex:1;min-width:150px;}
+  .sl{border-top:1px solid #111;margin-bottom:4px;}
+  .sn{font-size:9pt;line-height:1.5;}
+  .conf{margin-top:18px;border:1px solid #aaa;padding:12px;border-radius:4px;}
+  .ftr{margin-top:16px;font-size:8pt;color:#888;border-top:1px solid #eee;padding-top:6px;text-align:center;}
+  @media print{.no-print{display:none!important;}body{margin:0;}.wrap{padding:10mm 12mm;}}
+</style></head><body><div class="wrap">
+  <div class="hdr">
+    <div><h1>PROTOCOLO DE ENVIO AO FINANCEIRO</h1><div class="sub">Grupo Transmaroni · Departamento de Manutenção</div></div>
+    <div style="text-align:right;font-size:10pt;"><strong>${id}</strong><br><span style="color:#555;">${dt}</span></div>
+  </div>
+  <div class="meta">
+    <div><strong>Remetente:</strong> ${remetente||'—'}</div>
+    <div><strong>Destinatário:</strong> ${destinatario||'—'}</div>
+  </div>
+  ${obs?`<div class="obs"><strong>Observações:</strong> ${obs}</div>`:''}
+  <table>
+    <thead><tr><th>Tipo</th><th>Número</th><th>Fornecedor / Beneficiário</th><th style="text-align:right">Valor</th><th>Data</th></tr></thead>
+    <tbody>${rows}<tr class="tot"><td colspan="3">TOTAL GERAL</td><td style="text-align:right">R$ ${tot}</td><td></td></tr></tbody>
+  </table>
+  <div style="font-weight:700;margin-bottom:12px;">ASSINATURAS</div>
+  <div class="sigs">
+    <div class="sb">
+      ${assinatura&&assinatura.length>100?`<img src="${assinatura}" style="max-height:65px;margin-bottom:4px;">`:` <div style="height:65px;"></div>`}
+      <div class="sl"></div><div class="sn">${remetente||'Gestor — Equipe NF'}<br>Gestor / Responsável NF</div>
+    </div>
+    <div class="sb"><div style="height:65px;"></div><div class="sl"></div><div class="sn">Responsável Financeiro<br>Data: ____/____/________</div></div>
+    <div class="sb"><div style="height:65px;"></div><div class="sl"></div><div class="sn">Direção / Proprietário<br>Data: ____/____/________</div></div>
+  </div>
+  <div class="conf"><strong>RECIBO DE ENTREGA</strong>
+    <div style="margin-top:10px;font-size:10pt;line-height:2.2;">
+      Recebi ${(documentos||[]).length} documento(s) listados acima em ____/____/________ às ____:____<br>
+      Nome: _________________________________________ &nbsp; Assinatura: ___________________________
+    </div>
+  </div>
+  <div class="ftr">Gerado pelo Portal Manutenção — Grupo Transmaroni · ${dt}</div>
+  <div class="no-print" style="margin-top:14px;text-align:center;">
+    <button onclick="window.print()" style="padding:9px 24px;font-size:11pt;cursor:pointer;border:1px solid #333;border-radius:6px;background:#fff;">🖨️ Imprimir</button>
+  </div>
+</div></body></html>`;
+  const w = window.open('','_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else toast('Popup bloqueado — permita popups para imprimir.', 'error');
+}
+
+function imprimirProtocoloPreview() {
+  const sig = (_protSigCanvas && !_isCanvasBlank(_protSigCanvas)) ? _protSigCanvas.toDataURL() : '';
+  _abrirPrintProtocolo({
+    id: _gerarNumProtocolo(),
+    documentos: _protDocsSelected,
+    valor_total: _protDocsSelected.reduce((s,d)=>s+(d.valor||0),0),
+    remetente: currentUser?.nome||'',
+    destinatario: document.getElementById('prot-email')?.value||'—',
+    assinatura: sig,
+    data_envio: new Date().toISOString(),
+    obs: document.getElementById('prot-obs')?.value||'',
+  });
+}
+
+function imprimirProtocoloById(id) {
+  const p = protocolDB.find(x=>x.id===id);
+  if (!p) { toast('Protocolo não encontrado.','error'); return; }
+  _abrirPrintProtocolo(p);
+}
+
+function enviarProtocolo() {
+  const email = (document.getElementById('prot-email')?.value||'').trim();
+  if (!email||!email.includes('@')) { toast('Informe um e-mail válido.','error'); return; }
+  const sig    = (_protSigCanvas&&!_isCanvasBlank(_protSigCanvas)) ? _protSigCanvas.toDataURL() : '';
+  const num    = _gerarNumProtocolo();
+  const agora  = new Date();
+  const total  = _protDocsSelected.reduce((s,d)=>s+(d.valor||0),0);
+  const obs    = document.getElementById('prot-obs')?.value||'';
+  const cc     = document.getElementById('prot-cc')?.value||'';
+  const assunto= document.getElementById('prot-assunto')?.value||`Protocolo ${num}`;
+  const solC   = document.getElementById('prot-solicitar-conf')?.checked!==false;
+  const prot   = { id:num, numero:num, data_envio:agora.toISOString(), destinatario:email,
+    remetente:currentUser?.nome||'', assunto, documentos:[..._protDocsSelected],
+    valor_total:total, assinatura:sig, status:'enviado', confirmacao:null,
+    confirmado_por:null, data_confirmacao:null, obs, solicitar_confirmacao:solC };
+  protocolDB.push(prot); salvarProtocolos();
+  const linhas = _protDocsSelected.map(d=>`• ${({os:'OS',nf:'NF',boleto:'Boleto'}[d.tipo]||d.tipo).toUpperCase()} ${d.numero||'—'} — ${d.fornecedor||'—'} — R$ ${(d.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`).join('\n');
+  const corpo  = [`Prezado(a),`,``,`Encaminho o ${assunto} com os documentos listados abaixo, para análise e providências.`,``,`DOCUMENTOS (${_protDocsSelected.length}):`,linhas,``,`VALOR TOTAL: R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}`,``,obs?`OBSERVAÇÕES:\n${obs}\n`:'',solC?`Por favor, confirme o recebimento respondendo este e-mail.`:'',``,`Atenciosamente,`,`${currentUser?.nome||''} — Equipe NF · Manutenção`,`Enviado em: ${agora.toLocaleString('pt-BR')}`].join('\n');
+  const ccPart = cc ? `cc=${encodeURIComponent(cc)}&` : '';
+  window.open(`mailto:${email}?${ccPart}subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`, '_blank');
+  toast(`Protocolo ${num} registrado! E-mail preparado no seu cliente de e-mail.`, 'success');
+  fecharModalProtocolo(); buildPageProtocolo();
+}
+
+function confirmarLeituraProtocolo(id) {
+  const idx = protocolDB.findIndex(p=>p.id===id); if(idx===-1) return;
+  const nome = prompt(`Protocolo ${id}\n\nConfirmar recebimento — quem está confirmando? (nome completo):`);
+  if (!nome||!nome.trim()) return;
+  protocolDB[idx].status='confirmado'; protocolDB[idx].confirmado_por=nome.trim();
+  protocolDB[idx].data_confirmacao=new Date().toISOString();
+  salvarProtocolos(); buildPageProtocolo();
+  toast(`Protocolo ${id} confirmado por ${nome.trim()}.`, 'success');
+}
+
+function reenviarProtocolo(id) {
+  const p = protocolDB.find(x=>x.id===id); if(!p) return;
+  const linhas = (p.documentos||[]).map(d=>`• ${d.tipo.toUpperCase()} ${d.numero||'—'} — ${d.fornecedor||'—'} — R$ ${(d.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}`).join('\n');
+  const corpo = `[REENVIO] ${p.assunto||p.id}\n\nProtocolo ${p.id} — ${new Date(p.data_envio).toLocaleString('pt-BR')}\n\nDOCUMENTOS:\n${linhas}\n\nTOTAL: R$ ${(p.valor_total||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}\n\nAtt,\n${p.remetente}`;
+  window.open(`mailto:${p.destinatario}?subject=${encodeURIComponent('[REENVIO] '+(p.assunto||p.id))}&body=${encodeURIComponent(corpo)}`, '_blank');
+  toast('E-mail de reenvio preparado.', 'success');
+}
+// ── fim Protocolo Financeiro ──────────────────────────────────────────────
+
+// ============================================================
 // NAV
 // ============================================================
 // Páginas acessíveis por nível
-const PAGE_ADMIN    = ['dashboard','registros','automacoes','verificar','importar','mapeamento','colunas','usuarios','auditoria','ni-lote','vencimentos','operadores','agentes','ordemservico','comunicacao'];
-const PAGE_FISCAL   = ['dashboard','registros','automacoes','verificar','importar','mapeamento','vencimentos','agentes','ordemservico','comunicacao'];
+const PAGE_ADMIN    = ['dashboard','registros','automacoes','verificar','importar','protocolo','mapeamento','colunas','usuarios','auditoria','ni-lote','vencimentos','operadores','agentes','ordemservico','comunicacao'];
+const PAGE_FISCAL   = ['dashboard','registros','automacoes','verificar','importar','protocolo','mapeamento','vencimentos','agentes','ordemservico','comunicacao'];
 const PAGE_GERENCIA = ['dashboard','registros','automacoes','vencimentos'];
 const PAGE_SETOR    = ['registros','verificar','automacoes','vencimentos'];
 
@@ -5646,6 +6176,7 @@ function showPage(page) {
   if (page === 'ordemservico') buildPageOS();
   if (page === 'comunicacao')  buildPageCom();
   if (page === 'agentes')      buildPageAgentes();
+  if (page === 'protocolo')    buildPageProtocolo();
 }
 
 // ============================================================
