@@ -172,7 +172,99 @@ def api_status():
     return _cors(resp)
 
 
-# ── Microsoft Graph ──────────────────────────────────────
+# ── Email Agent Hub — config persistido em email-agent.json ──────
+EMAIL_AGENT_FILE = os.path.join(BASE, 'email-agent.json')
+
+_EA_DEFAULTS = {
+    'email': '',
+    'intervalo': 15,
+    'ativo': False,
+    'palavras_chave': ['nota fiscal', 'nf-e', 'nfs-e', 'boleto', 'fatura', 'danfe', 'nfe'],
+    'pasta': 'Inbox',
+    'ultimo_scan': None,
+    'emails_encontrados': 0,
+    'log': [],
+}
+
+def _ea_load():
+    if os.path.exists(EMAIL_AGENT_FILE):
+        try:
+            with open(EMAIL_AGENT_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            if not data.get('email'):
+                data['email'] = GRAPH_USER_EMAIL
+            return data
+        except Exception:
+            pass
+    cfg = dict(_EA_DEFAULTS)
+    cfg['email'] = GRAPH_USER_EMAIL
+    return cfg
+
+def _ea_save(data):
+    with open(EMAIL_AGENT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.route('/api/email-agent/config', methods=['GET'])
+def ea_config_get():
+    cfg = _ea_load()
+    cfg['graph_configurado'] = bool(GRAPH_TENANT_ID and GRAPH_CLIENT_ID and GRAPH_CLIENT_SECRET)
+    return _cors(jsonify(cfg))
+
+@app.route('/api/email-agent/config', methods=['POST'])
+def ea_config_save():
+    token = request.headers.get('X-Portal-Token', '')
+    if token != WRITE_TOKEN:
+        return _cors(jsonify({'error': 'token invalido'})), 403
+    body = request.get_json(force=True) or {}
+    current = _ea_load()
+    for k in ('email', 'intervalo', 'ativo', 'palavras_chave', 'pasta'):
+        if k in body:
+            current[k] = body[k]
+    _ea_save(current)
+    return _cors(jsonify({'ok': True}))
+
+@app.route('/api/email-agent/status', methods=['GET'])
+def ea_status():
+    cfg = _ea_load()
+    return _cors(jsonify({
+        'graph_configurado': bool(GRAPH_TENANT_ID and GRAPH_CLIENT_ID and GRAPH_CLIENT_SECRET),
+        'email':             cfg.get('email'),
+        'intervalo':         cfg.get('intervalo'),
+        'ativo':             cfg.get('ativo'),
+        'ultimo_scan':       cfg.get('ultimo_scan'),
+        'emails_encontrados':cfg.get('emails_encontrados', 0),
+        'log':               cfg.get('log', [])[:20],
+    }))
+
+@app.route('/api/email-agent/run', methods=['POST'])
+def ea_run():
+    token = request.headers.get('X-Portal-Token', '')
+    if token != WRITE_TOKEN:
+        return _cors(jsonify({'error': 'token invalido'})), 403
+    if not GRAPH_TENANT_ID or not GRAPH_CLIENT_ID or not GRAPH_CLIENT_SECRET:
+        return _cors(jsonify({'error': 'Graph API não configurada no servidor.'})), 503
+    cfg = _ea_load()
+    email = cfg.get('email') or GRAPH_USER_EMAIL
+    palavras = cfg.get('palavras_chave', _EA_DEFAULTS['palavras_chave'])
+    ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        all_emails, matched = _graph_scan(email, palavras)
+        entry = {'timestamp': ts, 'email': email, 'total': len(all_emails), 'encontrados': len(matched), 'status': 'ok'}
+        cfg['ultimo_scan']       = ts
+        cfg['emails_encontrados'] = len(matched)
+        log = cfg.get('log', [])
+        log.insert(0, entry)
+        cfg['log'] = log[:50]
+        _ea_save(cfg)
+        return _cors(jsonify({'ok': True, 'emails': matched, 'total_verificados': len(all_emails),
+                              'encontrados': len(matched), 'timestamp': ts}))
+    except Exception as e:
+        entry = {'timestamp': ts, 'email': email, 'total': 0, 'encontrados': 0, 'status': 'error', 'erro': str(e)}
+        cfg['log'] = ([entry] + cfg.get('log', []))[:50]
+        _ea_save(cfg)
+        return _cors(jsonify({'error': str(e)})), 500
+
+# ── Microsoft Graph ──────────────────────────────────────────────
 def _graph_token():
     if not _HAS_REQUESTS:
         raise RuntimeError('requests not installed')
@@ -186,61 +278,72 @@ def _graph_token():
     r.raise_for_status()
     return r.json().get('access_token')
 
+def _graph_scan(email, palavras):
+    token  = _graph_token()
+    hdrs   = {'Authorization': f'Bearer {token}'}
+    params = {
+        '$filter':  "hasAttachments eq true and isDraft eq false",
+        '$top':     '100',
+        '$orderby': 'receivedDateTime desc',
+        '$select':  'id,subject,from,receivedDateTime,hasAttachments,bodyPreview',
+    }
+    r = _req.get(f'https://graph.microsoft.com/v1.0/users/{email}/messages',
+                 headers=hdrs, params=params, timeout=25)
+    r.raise_for_status()
+    all_emails = r.json().get('value', [])
+    matched = [e for e in all_emails
+               if any(k in e.get('subject','').lower() for k in palavras)]
+    return all_emails, matched
+
 @app.route('/api/graph/emails', methods=['GET'])
 def graph_emails():
     if not GRAPH_TENANT_ID or not GRAPH_CLIENT_ID or not GRAPH_CLIENT_SECRET:
-        return jsonify({'error': 'Graph API não configurada. Defina GRAPH_TENANT_ID, GRAPH_CLIENT_ID e GRAPH_CLIENT_SECRET nas variáveis de ambiente do servidor.'}), 503
+        return _cors(jsonify({'error': 'Graph API não configurada no servidor.'})), 503
     try:
-        token  = _graph_token()
-        hdrs   = {'Authorization': f'Bearer {token}'}
-        params = {
-            '$filter':  "hasAttachments eq true and isDraft eq false",
-            '$top':     '50',
-            '$orderby': 'receivedDateTime desc',
-            '$select':  'id,subject,from,receivedDateTime,hasAttachments,bodyPreview'
-        }
-        r = _req.get(f'https://graph.microsoft.com/v1.0/users/{GRAPH_USER_EMAIL}/messages',
-                     headers=hdrs, params=params, timeout=20)
-        r.raise_for_status()
-        emails = r.json().get('value', [])
-        kw = ['nota fiscal', 'nf-e', 'nfs-e', 'boleto', 'fatura', 'danfe', 'nfe', 'nota de serviço']
-        emails = [e for e in emails if any(k in e.get('subject','').lower() for k in kw)]
-        return jsonify({'emails': emails})
+        cfg     = _ea_load()
+        email   = cfg.get('email') or GRAPH_USER_EMAIL
+        palavras = cfg.get('palavras_chave', _EA_DEFAULTS['palavras_chave'])
+        _, matched = _graph_scan(email, palavras)
+        return _cors(jsonify({'emails': matched, 'email': email}))
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _cors(jsonify({'error': str(e)})), 500
 
 @app.route('/api/graph/email/<msg_id>/attachments', methods=['GET'])
 def graph_attachments(msg_id):
     try:
+        cfg   = _ea_load()
+        email = cfg.get('email') or GRAPH_USER_EMAIL
         token = _graph_token()
         hdrs  = {'Authorization': f'Bearer {token}'}
         r = _req.get(
-            f'https://graph.microsoft.com/v1.0/users/{GRAPH_USER_EMAIL}/messages/{msg_id}/attachments',
+            f'https://graph.microsoft.com/v1.0/users/{email}/messages/{msg_id}/attachments',
             headers=hdrs, params={'$select': 'id,name,contentType,size'}, timeout=20)
         r.raise_for_status()
         atts = [a for a in r.json().get('value', [])
                 if 'pdf' in a.get('contentType','').lower() or a.get('name','').lower().endswith('.pdf')]
-        return jsonify({'attachments': atts})
+        return _cors(jsonify({'attachments': atts}))
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _cors(jsonify({'error': str(e)})), 500
 
 @app.route('/api/graph/attachment/<msg_id>/<att_id>', methods=['GET'])
 def graph_attachment(msg_id, att_id):
     try:
+        cfg   = _ea_load()
+        email = cfg.get('email') or GRAPH_USER_EMAIL
         token = _graph_token()
         hdrs  = {'Authorization': f'Bearer {token}'}
         r = _req.get(
-            f'https://graph.microsoft.com/v1.0/users/{GRAPH_USER_EMAIL}/messages/{msg_id}/attachments/{att_id}',
+            f'https://graph.microsoft.com/v1.0/users/{email}/messages/{msg_id}/attachments/{att_id}',
             headers=hdrs, timeout=30)
         r.raise_for_status()
         att = r.json()
-        return jsonify({
+        return _cors(jsonify({
             'nome':        att.get('name', 'arquivo.pdf'),
             'contentType': att.get('contentType', 'application/pdf'),
-            'b64':         att.get('contentBytes', '')
-        })
+            'b64':         att.get('contentBytes', ''),
+        }))
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _cors(jsonify({'error': str(e)})), 500
 
 # ── Arquivei ──────────────────────────────────────────────
 @app.route('/api/arquivei/pdf/<chave>', methods=['GET'])
