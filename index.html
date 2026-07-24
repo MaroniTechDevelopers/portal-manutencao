@@ -1225,6 +1225,43 @@ tr:hover td{background:rgba(0,0,0,.025)}
   </div>
 </div>
 
+<!-- MODAL: Lote de PDFs -->
+<div id="modal-lote-pdf" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharModalLote()">
+  <div class="modal" style="max-width:640px;width:96%;max-height:90vh;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <div class="modal-title">📦 Importar Lote de PDFs</div>
+      <button class="modal-close" onclick="fecharModalLote()">✕</button>
+    </div>
+    <div class="modal-body" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:14px;">
+      <div id="lote-drop-zone"
+        style="border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;"
+        ondragover="event.preventDefault();this.style.borderColor='#7c3aed';this.style.background='rgba(124,58,237,.07)'"
+        ondragleave="this.style.borderColor='';this.style.background=''"
+        ondrop="_loteDrop(event)">
+        <div style="font-size:36px;margin-bottom:8px;">📄</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Solte os PDFs aqui</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Aceita múltiplos arquivos — OS, Nota Fiscal ou Boleto</div>
+        <input type="file" id="lote-file-inp" multiple accept=".pdf" style="display:none;" onchange="processarLotePDFs(this.files)">
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('lote-file-inp').click()">Selecionar arquivos</button>
+      </div>
+      <div id="lote-progresso" style="display:none;">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:5px;" id="lote-prog-txt">Processando…</div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
+          <div id="lote-prog-bar" style="height:100%;background:#7c3aed;border-radius:3px;width:0%;transition:width .3s;"></div>
+        </div>
+      </div>
+      <div id="lote-resultados"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between;">
+      <button class="btn btn-secondary btn-sm" onclick="fecharModalLote()">Fechar</button>
+      <div style="display:flex;gap:8px;">
+        <button id="btn-lote-exportar" class="btn btn-secondary btn-sm" style="display:none;" onclick="exportarLoteCSV()">↓ Exportar CSV</button>
+        <button id="btn-lote-importar" class="btn btn-primary btn-sm" style="display:none;background:#7c3aed;border-color:#7c3aed;" onclick="salvarLote()">💾 Importar OS identificadas</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: Captura de E-mails -->
 <div id="modal-email-cap" class="modal-overlay" style="display:none;" onclick="if(event.target===this)fecharEmailCap()">
   <div class="modal" style="max-width:700px;width:96%;max-height:90vh;display:flex;flex-direction:column;">
@@ -1539,6 +1576,32 @@ tr:hover td{background:rgba(0,0,0,.025)}
       </div>
     </div>
 
+  </div>
+
+  <!-- Card: Robô Lote de PDFs -->
+  <div class="card" style="border-top:3px solid #7c3aed;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <span style="font-size:22px;">📦</span>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;color:var(--text);">Robô — Lote de PDFs</div>
+        <div style="font-size:12px;color:var(--muted);">Importa múltiplos PDFs de uma vez: identifica automaticamente OS, Nota Fiscal e Boleto</div>
+      </div>
+      <button class="btn btn-primary btn-sm" style="background:#7c3aed;border-color:#7c3aed;flex-shrink:0;" onclick="abrirModalLote()">📦 Processar Lote</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+      <div style="padding:10px 12px;background:var(--bg);border-radius:8px;border-left:3px solid #3b82f6;">
+        <div style="font-size:11px;font-weight:700;color:#3b82f6;margin-bottom:2px;">🔧 Ordem de Serviço</div>
+        <div style="font-size:11px;color:var(--muted);">Número, fornecedor, valor, data, descrição</div>
+      </div>
+      <div style="padding:10px 12px;background:var(--bg);border-radius:8px;border-left:3px solid #10b981;">
+        <div style="font-size:11px;font-weight:700;color:#10b981;margin-bottom:2px;">📄 Nota Fiscal (NFe / NFS-e)</div>
+        <div style="font-size:11px;color:var(--muted);">Chave, emitente, valor, data de emissão</div>
+      </div>
+      <div style="padding:10px 12px;background:var(--bg);border-radius:8px;border-left:3px solid #f59e0b;">
+        <div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:2px;">🧾 Boleto</div>
+        <div style="font-size:11px;color:var(--muted);">Valor, vencimento, beneficiário, código</div>
+      </div>
+    </div>
   </div>
 
   <!-- Card: próximos passos de integração -->
@@ -3063,6 +3126,259 @@ async function lerPDFOS() {
     toast('Erro ao ler PDF: ' + e.message.substring(0, 80), 'error');
   }
 }
+
+// ── Robô: Lote de PDFs ───────────────────────────────────────────────────
+let _loteResultados = [];
+
+function abrirModalLote() {
+  _loteResultados = [];
+  const d = document.getElementById('modal-lote-pdf');
+  if (d) d.style.display = '';
+  ['lote-progresso','btn-lote-importar','btn-lote-exportar'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  const r = document.getElementById('lote-resultados'); if (r) r.innerHTML = '';
+  const b = document.getElementById('lote-prog-bar');   if (b) b.style.width = '0%';
+  const inp = document.getElementById('lote-file-inp'); if (inp) inp.value = '';
+}
+
+function fecharModalLote() {
+  const d = document.getElementById('modal-lote-pdf'); if (d) d.style.display = 'none';
+}
+
+function _loteDrop(ev) {
+  ev.preventDefault();
+  const zone = document.getElementById('lote-drop-zone');
+  if (zone) { zone.style.borderColor = ''; zone.style.background = ''; }
+  const files = ev.dataTransfer ? ev.dataTransfer.files : null;
+  if (files && files.length) processarLotePDFs(files);
+}
+
+async function _extrairLinhasPDF(file, maxPg) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const arrBuf = await file.arrayBuffer();
+  const pdf    = await pdfjsLib.getDocument({ data: arrBuf }).promise;
+  const itens  = [];
+  for (let p = 1; p <= Math.min(pdf.numPages, maxPg || 3); p++) {
+    const pg = await pdf.getPage(p);
+    const vp = pg.getViewport({ scale: 1 });
+    const tc = await pg.getTextContent();
+    for (const it of tc.items) {
+      const s = (it.str || '').trim();
+      if (s) itens.push({ str: s, x: Math.round(it.transform[4]), y: Math.round(vp.height - it.transform[5]) });
+    }
+  }
+  itens.sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+  const linhas = [];
+  for (const it of itens) {
+    const ul = linhas[linhas.length - 1];
+    if (ul && Math.abs(it.y - ul.y) <= 5) ul.str += ' ' + it.str;
+    else linhas.push({ y: it.y, str: it.str });
+  }
+  return linhas;
+}
+
+function _identificarTipoPDF(linhas) {
+  const txt = linhas.map(l => l.str).join('\n').toUpperCase();
+  if (/ORDEM\s+DE\s+SERVI|O\.S\.\s*N[.º°]?\s*\d/.test(txt))          return 'os';
+  if (/DANFE|NOTA\s+FISCAL\s+ELETR|CHAVE\s+DE\s+ACESSO/.test(txt))    return 'nfe';
+  if (/NOTA\s+FISCAL\s+DE\s+SERVI|NFS-E|NFS\.E/.test(txt))            return 'nfse';
+  if (/BOLETO|C.DIGO\s+DE\s+BARRAS|LINHA\s+DIGIT/.test(txt))          return 'boleto';
+  if (/\d{44}/.test(txt.replace(/[\s\-]/g, '')))                       return 'nfe';
+  return 'outro';
+}
+
+function _extrairDadosOS(linhas) {
+  const texto = linhas.map(l => l.str).join('\n');
+  const achar = pat => { for (const l of linhas) { const m = l.str.match(pat); if (m) return m; } return null; };
+  let num = '';
+  const mNum = achar(/[Oo]rdem\s+de\s+[Ss]ervi.{0,5}o\s+n.{0,3}[\s\d]+0*(\d{4,8})/) ||
+               texto.match(/\*\d{1,3}-(\d{4,8})\*/);
+  if (mNum) num = mNum[mNum.length - 1];
+  let fornecedor = '';
+  const mForn = achar(/[Ff]ornecedor\s*:?\s*([\d\.\s]*)([A-Z][A-Z\s&]{4,}(?:LTDA|EIRELI|ME\b|SA\b|EPP))/);
+  if (mForn) fornecedor = mForn[2].trim().replace(/\s+/g, ' ');
+  else { const mF2 = texto.match(/\b(\d{1,3}\.\d{3}\.\d{3,6})\s+([A-Z][A-Z\s&]{4,}(?:LTDA|EIRELI|ME\b|SA\b|EPP))/); if (mF2) fornecedor = mF2[2].trim().replace(/\s+/g,' '); }
+  let data = '';
+  const mDt = achar(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (mDt) data = `${mDt[3]}-${mDt[2]}-${mDt[1]}`;
+  let valor = 0;
+  const mVal = achar(/Custo\s+total.{0,40}?:\s*([\d\.]+,\d{2})/);
+  if (mVal) valor = parseFloat(mVal[1].replace(/\./g,'').replace(',','.')) || 0;
+  let descricao = '';
+  let passou = false;
+  for (const l of linhas) {
+    if (!passou && num && l.str.includes(num)) { passou = true; continue; }
+    if (passou) {
+      const ln = l.str.trim();
+      const ehLabel = /^(Fornecedor|Ve.{0,3}culo|Chassi|Motorista|Conjunto|Respons|Setor|In.{0,3}cio|Prev\.|Situa|Ordem|Item|Produto|Requisi|Custo|P.gina|M.dulo|Ano|Km)/i.test(ln);
+      if (ln.length > 10 && !ehLabel && /[A-Z]/.test(ln[0]) && !ln.includes(':')) { descricao = ln.substring(0,120); break; }
+    }
+  }
+  return { numero: num, fornecedor, data, valor, descricao };
+}
+
+function _extrairDadosNF(linhas) {
+  const texto = linhas.map(l => l.str).join('\n');
+  const achar = pat => { for (const l of linhas) { const m = l.str.match(pat); if (m) return m; } return null; };
+  let chave = '';
+  const mCh = texto.replace(/[\s\-]/g,'').match(/\d{44}/);
+  if (mCh) chave = mCh[0];
+  let numero = '';
+  const mNr = achar(/N[º°]?\s*(?:da\s+NF[:\-\s])?\s*(\d{3,9})/i) || achar(/N[rR][°º]?\s*(\d{3,9})/);
+  if (mNr) numero = mNr[1];
+  let emitente = '';
+  const mEm = texto.match(/(?:RAZ.O\s+SOCIAL|EMITENTE)[:\s]+([A-Z][^\n]{5,60})/i);
+  if (mEm) emitente = mEm[1].trim().replace(/\s+/g,' ').substring(0,80);
+  let valor = 0;
+  const mVl = texto.match(/VALOR\s+TOTAL\s+DA\s+NOTA[:\s]*([\d\.]+,\d{2})/i);
+  if (mVl) valor = parseFloat(mVl[1].replace(/\./g,'').replace(',','.')) || 0;
+  if (!valor) { const mVl2 = achar(/[Vv]alor\s+[Tt]otal[:\s]*([\d\.]+,\d{2})/); if (mVl2) valor = parseFloat(mVl2[1].replace(/\./g,'').replace(',','.')) || 0; }
+  let data = '';
+  const mDtE = texto.match(/DATA\s+(?:DE\s+)?EMISS.O[:\s]*(\d{2})\/(\d{2})\/(\d{4})/i);
+  if (mDtE) data = `${mDtE[3]}-${mDtE[2]}-${mDtE[1]}`;
+  else { const mDt = achar(/(\d{2})\/(\d{2})\/(\d{4})/); if (mDt) data = `${mDt[3]}-${mDt[2]}-${mDt[1]}`; }
+  return { chave, numero, emitente, valor, data };
+}
+
+function _extrairDadosBoleto(linhas) {
+  const texto = linhas.map(l => l.str).join('\n');
+  const achar = pat => { for (const l of linhas) { const m = l.str.match(pat); if (m) return m; } return null; };
+  let valor = 0;
+  const mVl = texto.match(/(?:VALOR\s+(?:DO\s+)?DOCUMENTO|VALOR\s+COBRADO)[:\s]*([\d\.]+,\d{2})/i);
+  if (mVl) valor = parseFloat(mVl[1].replace(/\./g,'').replace(',','.')) || 0;
+  if (!valor) { const mVl2 = achar(/[Vv]alor[:\s]+([\d\.]+,\d{2})/); if (mVl2) valor = parseFloat(mVl2[1].replace(/\./g,'').replace(',','.')) || 0; }
+  let vencimento = '';
+  const mVc = texto.match(/(?:VENCIMENTO|DATA\s+(?:DE\s+)?VENCIMENTO)[:\s]*(\d{2})\/(\d{2})\/(\d{4})/i);
+  if (mVc) vencimento = `${mVc[3]}-${mVc[2]}-${mVc[1]}`;
+  let beneficiario = '';
+  const mBn = texto.match(/(?:BENEFICI.RIO|CEDENTE|CREDOR)[:\s]*([A-Z][^\n]{5,80})/i);
+  if (mBn) beneficiario = mBn[1].trim().replace(/\s+/g,' ').substring(0,80);
+  let codigoBarras = '';
+  const mCd = texto.match(/(\d{5}\.\d{5}\s+\d{5}\.\d{6}\s+\d{5}\.\d{6}\s+\d\s+\d{14})/);
+  if (mCd) codigoBarras = mCd[1].replace(/\s/g,'');
+  return { valor, vencimento, beneficiario, codigoBarras };
+}
+
+function _renderLoteCard(r) {
+  const tipoLabel = { os:'🔧 Ordem de Serviço', nfe:'📄 Nota Fiscal (NFe)', nfse:'📄 NFS-e', boleto:'🧾 Boleto', outro:'❓ Não identificado' };
+  const tipoColor = { os:'#3b82f6', nfe:'#10b981', nfse:'#10b981', boleto:'#f59e0b', outro:'#6b7280' };
+  const d   = r.dados || {};
+  const cor = tipoColor[r.tipo] || '#6b7280';
+  let detalhe = '';
+  if (r.erro) {
+    detalhe = '⚠️ Erro: ' + r.erro.substring(0,80);
+  } else if (r.tipo === 'os') {
+    const vf = d.valor ? 'R$ ' + d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : 'R$ —';
+    detalhe = `OS ${d.numero||'?'} · ${d.fornecedor||'—'} · ${vf}`;
+  } else if (r.tipo === 'nfe' || r.tipo === 'nfse') {
+    const vf = d.valor ? 'R$ ' + d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '';
+    const ch = d.chave ? d.chave.substring(0,10)+'…' : '';
+    detalhe = [d.emitente||'—', vf, ch ? 'Chave: '+ch : ''].filter(Boolean).join(' · ');
+  } else if (r.tipo === 'boleto') {
+    const vf = d.valor ? 'R$ ' + d.valor.toLocaleString('pt-BR',{minimumFractionDigits:2}) : 'R$ —';
+    const vc = d.vencimento ? 'Venc: ' + d.vencimento.split('-').reverse().join('/') : '';
+    detalhe = [vf, vc, d.beneficiario||''].filter(Boolean).join(' · ');
+  } else {
+    detalhe = 'Tipo de documento não reconhecido.';
+  }
+  const icone = r.erro ? '❌' : (r.tipo === 'outro' ? '⚠️' : '✅');
+  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;background:var(--bg);border-left:3px solid ${cor};margin-bottom:6px;">
+    <span style="font-size:18px;line-height:1.3;">${icone}</span>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10px;font-weight:700;color:${cor};text-transform:uppercase;letter-spacing:.5px;">${tipoLabel[r.tipo]||r.tipo}</div>
+      <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0;">${r.arquivo}</div>
+      <div style="font-size:11px;color:var(--muted);">${detalhe}</div>
+    </div>
+  </div>`;
+}
+
+async function processarLotePDFs(files) {
+  if (!files || !files.length) return;
+  if (typeof pdfjsLib === 'undefined') { toast('PDF.js não carregado — recarregue a página.','error'); return; }
+  _loteResultados = [];
+  const progEl  = document.getElementById('lote-progresso');
+  const progBar = document.getElementById('lote-prog-bar');
+  const progTxt = document.getElementById('lote-prog-txt');
+  const resEl   = document.getElementById('lote-resultados');
+  const btnImp  = document.getElementById('btn-lote-importar');
+  const btnExp  = document.getElementById('btn-lote-exportar');
+  if (progEl)  progEl.style.display = '';
+  if (btnImp)  btnImp.style.display = 'none';
+  if (btnExp)  btnExp.style.display = 'none';
+  if (resEl)   resEl.innerHTML = '';
+  const arr = Array.from(files);
+  for (let i = 0; i < arr.length; i++) {
+    const file = arr[i];
+    if (progTxt) progTxt.textContent = `Processando ${i+1} de ${arr.length}: ${file.name}`;
+    if (progBar) progBar.style.width = `${Math.round((i / arr.length) * 100)}%`;
+    const resultado = { arquivo: file.name, tipo: 'outro', dados: {}, erro: null };
+    try {
+      const linhas = await _extrairLinhasPDF(file, 3);
+      resultado.tipo  = _identificarTipoPDF(linhas);
+      if      (resultado.tipo === 'os')     resultado.dados = _extrairDadosOS(linhas);
+      else if (resultado.tipo === 'nfe')    resultado.dados = _extrairDadosNF(linhas);
+      else if (resultado.tipo === 'nfse')   resultado.dados = _extrairDadosNF(linhas);
+      else if (resultado.tipo === 'boleto') resultado.dados = _extrairDadosBoleto(linhas);
+    } catch(e) {
+      resultado.erro = e.message;
+    }
+    _loteResultados.push(resultado);
+    if (resEl) resEl.innerHTML += _renderLoteCard(resultado);
+  }
+  if (progBar) progBar.style.width = '100%';
+  if (progTxt) progTxt.textContent = `Concluído — ${arr.length} arquivo(s) processado(s)`;
+  const temOS    = _loteResultados.some(r => r.tipo === 'os' && !r.erro && r.dados.numero);
+  const temDados = _loteResultados.some(r => !r.erro && r.tipo !== 'outro');
+  if (btnImp && temOS)    btnImp.style.display = '';
+  if (btnExp && temDados) btnExp.style.display = '';
+}
+
+function salvarLote() {
+  carregarOS();
+  let osNovos = 0;
+  for (const r of _loteResultados) {
+    if (r.tipo !== 'os' || r.erro || !r.dados.numero) continue;
+    const d = r.dados;
+    if (!osDB.find(o => o.numero === d.numero)) {
+      osDB.push({ id: Date.now() + Math.random(), numero: d.numero, fornecedor: d.fornecedor||'',
+                  data: d.data||'', valor: d.valor||0, status:'Aberta', descricao: d.descricao||'',
+                  tolerancia:5, obs:'Importado via lote PDF' });
+      osNovos++;
+    }
+  }
+  salvarOSLocal();
+  const nfs  = _loteResultados.filter(r => (r.tipo==='nfe'||r.tipo==='nfse') && !r.erro).length;
+  const bols = _loteResultados.filter(r => r.tipo==='boleto' && !r.erro).length;
+  const partes = [];
+  if (osNovos) partes.push(`${osNovos} OS salva${osNovos>1?'s':''}`);
+  if (nfs)     partes.push(`${nfs} NF${nfs>1?'s':''} identificada${nfs>1?'s':''}`);
+  if (bols)    partes.push(`${bols} boleto${bols>1?'s':''} identificado${bols>1?'s':''}`);
+  if (partes.length) {
+    toast(partes.join(', ') + ' ✅', 'success');
+    fecharModalLote();
+    if (osNovos) { showPage('ordemservico'); buildPageOS(); }
+  } else {
+    toast('Nenhuma OS nova para importar.', 'error');
+  }
+}
+
+function exportarLoteCSV() {
+  const linhas = ['Arquivo,Tipo,Número/Chave,Emitente/Fornecedor,Valor,Data,Extra'];
+  for (const r of _loteResultados) {
+    if (r.erro || r.tipo === 'outro') continue;
+    const d = r.dados;
+    let num='', emit='', val='', dat='', extra='';
+    if (r.tipo==='os')                        { num=d.numero||''; emit=d.fornecedor||''; val=d.valor||''; dat=d.data||''; extra=d.descricao||''; }
+    if (r.tipo==='nfe'||r.tipo==='nfse')      { num=d.chave||d.numero||''; emit=d.emitente||''; val=d.valor||''; dat=d.data||''; }
+    if (r.tipo==='boleto')                    { num=d.codigoBarras||''; emit=d.beneficiario||''; val=d.valor||''; dat=d.vencimento||''; }
+    linhas.push([r.arquivo,r.tipo,num,emit,val,dat,extra].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(','));
+  }
+  const blob = new Blob(['﻿'+linhas.join('\r\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'lote_pdfs.csv'; a.click();
+}
+// ── fim Robô Lote de PDFs ─────────────────────────────────────────────────
 
 function buildPageOS() {
   carregarOS();
