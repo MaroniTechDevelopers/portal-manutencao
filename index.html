@@ -307,6 +307,9 @@ tr:hover td{background:rgba(0,0,0,.025)}
       </div>
     </div>
     <div class="auth-body">
+      <div id="auth-no-users" style="display:none;padding:12px 14px;background:rgba(245,200,0,.08);border:1px solid rgba(245,200,0,.25);border-radius:9px;font-size:12px;color:rgba(255,255,255,.7);text-align:center;margin-bottom:14px;line-height:1.5;">
+        ⚠️ Nenhum usuário configurado neste portal.<br>Entre em contato com o administrador para obter acesso.
+      </div>
       <div class="auth-field">
         <label>Login</label>
         <input id="auth-login" type="text" placeholder="Seu login" autocomplete="username"
@@ -1980,7 +1983,10 @@ tr:hover td{background:rgba(0,0,0,.025)}
       <h2>Usuários do Portal</h2>
       <p>Gerencie os acessos por setor — somente administradores podem criar usuários</p>
     </div>
-    <button class="btn btn-primary btn-sm" onclick="abrirModalUsuario()">+ Novo Usuário</button>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-secondary btn-sm" onclick="exportarUsersJson()" title="Baixe este arquivo e adicione ao repositório para liberar o acesso na web">⬇️ Exportar users.json</button>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalUsuario()">+ Novo Usuário</button>
+    </div>
   </div>
   <div class="card">
     <table class="users-table">
@@ -2230,7 +2236,9 @@ async function syncFromServer() {
       const r = await fetch(ep.url);
       if (r.ok) {
         const data = await r.json();
-        if (data !== null) localStorage.setItem(ep.key, JSON.stringify(data));
+        // Só sobrescreve se o servidor retornou dados não-vazios
+        const nonEmpty = data !== null && !(Array.isArray(data) && data.length === 0);
+        if (nonEmpty) localStorage.setItem(ep.key, JSON.stringify(data));
       }
     } catch {}
   }
@@ -2281,7 +2289,16 @@ function recuperarSession() {
 // ── Verificar autenticação antes de carregar o portal ──────────
 function checkAuth() {
   const usuarios = getUsuarios();
-  if (!usuarios.length) { showSetup(); return false; }
+  if (!usuarios.length) {
+    if (IS_SERVER) {
+      const el = document.getElementById('auth-no-users');
+      if (el) el.style.display = 'block';
+      showLogin();
+    } else {
+      showSetup();
+    }
+    return false;
+  }
   const session = recuperarSession();
   if (session && session.id) {
     const user = usuarios.find(u => u.id === session.id && u.login === session.login);
@@ -2436,6 +2453,17 @@ async function salvarUsuario() {
   fecharModalUsuario();
   renderUsuarios();
   toast('Usuário salvo com sucesso!', 'success');
+}
+
+function exportarUsersJson() {
+  const usuarios = getUsuarios();
+  if (!usuarios.length) { toast('Nenhum usuário para exportar.', 'error'); return; }
+  const blob = new Blob([JSON.stringify(usuarios, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'users.json';
+  a.click();
+  toast('users.json baixado. Adicione ao repositório e faça push para ativar o acesso na web.', 'success');
 }
 
 function deletarUsuario(id) {
