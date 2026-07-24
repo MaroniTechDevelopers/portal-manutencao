@@ -2963,47 +2963,91 @@ async function lerPDFOS() {
   const nomEl = document.getElementById('os-pdf-nome');
   if (nomEl) nomEl.textContent = '⏳ Lendo PDF…';
   try {
-    if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js não carregado');
+    if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js não carregado — recarregue a página.');
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     const arrBuf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrBuf }).promise;
-    let texto = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const pg = await pdf.getPage(i);
-      const tc = await pg.getTextContent();
-      texto += tc.items.map(it => it.str).join(' ') + '\n';
+
+    // ── Extração com ordenação por coordenadas (leitura real) ──
+    const todosItens = [];
+    for (let p = 1; p <= Math.min(pdf.numPages, 2); p++) {
+      const pg  = await pdf.getPage(p);
+      const vp  = pg.getViewport({ scale: 1 });
+      const tc  = await pg.getTextContent();
+      for (const it of tc.items) {
+        const s = (it.str || '').trim();
+        if (!s) continue;
+        todosItens.push({
+          str: s,
+          x: Math.round(it.transform[4]),
+          y: Math.round(vp.height - it.transform[5]), // flip: 0 = topo
+        });
+      }
+    }
+    // Ordena: cima para baixo (y asc), esquerda para direita (x asc)
+    todosItens.sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+
+    // Agrupa itens na mesma linha (tolerância ±5px)
+    const linhas = [];
+    for (const it of todosItens) {
+      const ul = linhas[linhas.length - 1];
+      if (ul && Math.abs(it.y - ul.y) <= 5) {
+        ul.str += ' ' + it.str;
+      } else {
+        linhas.push({ y: it.y, str: it.str });
+      }
     }
 
+    const texto = linhas.map(l => l.str).join('\n');
+    console.log('[lerPDFOS] texto extraído:\n' + texto); // debug: inspecione no DevTools
+
+    // ── Helpers ──────────────────────────────────────────────
     const setF = (id, val) => { const el = document.getElementById(id); if (el && !el.value && val) el.value = val; };
+    const achar = pat => { for (const l of linhas) { const m = l.str.match(pat); if (m) return m; } return null; };
 
-    // 1. Número OS — "Ordem de Serviço nº: 001 00291344" ou barcode "*001-291344*"
+    // 1. Número OS
     let num = '';
-    const mNum1 = texto.match(/[Oo]rdem\s+de\s+[Ss]ervi.{0,4}o\s+n.{0,3}\s*[:\-]?\s*\d+\s+0*(\d{4,8})/);
-    if (mNum1) num = mNum1[1];
-    if (!num) { const mNum2 = texto.match(/\*\d{1,3}-(\d{4,8})\*/); if (mNum2) num = mNum2[1]; }
-    setF('os-f-numero', num);
+    const mNum = achar(/[Oo]rdem\s+de\s+[Ss]ervi.{0,5}o\s+n.{0,3}[\s\d]+0*(\d{4,8})/) ||
+                 texto.match(/\*\d{1,3}-(\d{4,8})\*/);
+    if (mNum) { num = mNum[mNum.length - 1]; setF('os-f-numero', num); }
 
-    // 2. Fornecedor — código X.XXX.XXX + Nome LTDA/etc (âncora mais confiável que "Fornecedor :")
-    //    No stream PDF.js: "... Fornecedor : 3.904.454 ILAN AUTO PECAS E ACESSORIOS LTDA Veículo :..."
-    const mForn = texto.match(/\b\d{1,3}\.\d{3}\.\d{3,6}\s+([^:]+?(?:LTDA|EIRELI|ME|SA|EPP)(?:\s+ME)?)/i);
-    if (mForn) setF('os-f-fornecedor', mForn[1].trim().replace(/\s+/g, ' '));
+    // 2. Fornecedor — linha que contém "Fornecedor" + nome da empresa
+    //    Padrão: "Fornecedor : 3.904.454  ILAN AUTO PECAS E ACESSORIOS LTDA"
+    const mForn = achar(/[Ff]ornecedor\s*:?\s*([\d\.\s]*)([A-Z][A-Z\s&]{4,}(?:LTDA|EIRELI|ME\b|SA\b|EPP))/);
+    if (mForn) {
+      setF('os-f-fornecedor', mForn[2].trim().replace(/\s+/g, ' '));
+    } else {
+      // fallback: código X.XXX.XXX logo antes do nome
+      const mF2 = texto.match(/\b(\d{1,3}\.\d{3}\.\d{3,6})\s+([A-Z][A-Z\s&]{4,}(?:LTDA|EIRELI|ME\b|SA\b|EPP))/);
+      if (mF2) setF('os-f-fornecedor', mF2[2].trim().replace(/\s+/g, ' '));
+    }
 
-    // 3. Data — primeira data dd/mm/aaaa encontrada (= data de abertura/início)
-    const mData = texto.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    // 3. Data — primeira data dd/mm/aaaa do documento
+    const mData = achar(/(\d{2})\/(\d{2})\/(\d{4})/);
     if (mData) setF('os-f-data', `${mData[3]}-${mData[2]}-${mData[1]}`);
 
-    // 4. Descrição — no stream do PDF.js a descrição aparece ANTES do label "Serviços Solicitados"
-    //    Captura texto entre o número da OS e "Serviços Solicitados"
-    const numEsc = num ? num.replace(/\d/g, '\\d') : '\\d{5,8}';
-    const mDesc = texto.match(new RegExp('0+' + num + '\\s+([A-Z][\\s\\S]{15,300}?)\\s+Servi.{0,4}os\\s+Solicitados'));
-    if (mDesc) setF('os-f-descricao', mDesc[1].trim().replace(/\s+/g, ' ').substring(0, 120));
+    // 4. Descrição — linha de texto após o número da OS, maiúscula, sem ":" (não é label)
+    if (num) {
+      let passou = false;
+      for (const l of linhas) {
+        if (!passou && l.str.includes(num)) { passou = true; continue; }
+        if (passou) {
+          const ln = l.str.trim();
+          const ehLabel = /^(Fornecedor|Ve.{0,3}culo|Chassi|Motorista|Conjunto|Respons|Setor|In.{0,3}cio|Prev\.|Situa|Ordem|Item|Produto|Requisi|Custo|P.gina|M.dulo|Ano|Km)/i.test(ln);
+          if (ln.length > 10 && !ehLabel && /[A-Z]/.test(ln[0]) && !ln.includes(':')) {
+            setF('os-f-descricao', ln.substring(0, 120));
+            break;
+          }
+        }
+      }
+    }
 
-    // 5. Valor — "Custo total das Requisições da O.S. : 1.581,00"
-    const mVal = texto.match(/Custo\s+total\s+das\s+Requisi.{0,25}?:\s*([\d\.]+,\d{2})/);
+    // 5. Valor — linha com "Custo total das Requisições"
+    const mVal = achar(/Custo\s+total.{0,40}?:\s*([\d\.]+,\d{2})/);
     if (mVal) setF('os-f-valor', String(parseFloat(mVal[1].replace(/\./g, '').replace(',', '.')) || ''));
 
-    // 6. Status — "Situação : Andamento"
-    const mSit = texto.match(/Situa.{0,6}o\s*[:\-]?\s*(\w+)/);
+    // 6. Status
+    const mSit = achar(/Situa.{0,8}o\s*:?\s*(\w+)/);
     if (mSit) {
       const sit = mSit[1].toLowerCase();
       const map = [['andamento', 'Em andamento'], ['conclu', 'Concluída'], ['cancelad', 'Cancelada'], ['aberta', 'Aberta']];
@@ -3014,9 +3058,9 @@ async function lerPDFOS() {
     if (nomEl) nomEl.textContent = '✅ ' + file.name;
     toast('PDF lido — campos preenchidos automaticamente.', 'success');
   } catch(e) {
-    console.error('lerPDFOS', e);
-    if (nomEl) nomEl.textContent = '⚠️ Erro ao ler PDF';
-    toast('Não foi possível extrair dados do PDF.', 'error');
+    console.error('[lerPDFOS]', e);
+    if (nomEl) nomEl.textContent = '⚠️ Erro: ' + e.message.substring(0, 60);
+    toast('Erro ao ler PDF: ' + e.message.substring(0, 80), 'error');
   }
 }
 
